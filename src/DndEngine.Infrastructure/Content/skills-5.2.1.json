@@ -1,0 +1,20 @@
+[
+  {"id":"acrobatics","name":"Acrobatics","ability":"Dexterity"},
+  {"id":"animal-handling","name":"Animal Handling","ability":"Wisdom"},
+  {"id":"arcana","name":"Arcana","ability":"Intelligence"},
+  {"id":"athletics","name":"Athletics","ability":"Strength"},
+  {"id":"deception","name":"Deception","ability":"Charisma"},
+  {"id":"history","name":"History","ability":"Intelligence"},
+  {"id":"insight","name":"Insight","ability":"Wisdom"},
+  {"id":"intimidation","name":"Intimidation","ability":"Charisma"},
+  {"id":"investigation","name":"Investigation","ability":"Intelligence"},
+  {"id":"medicine","name":"Medicine","ability":"Wisdom"},
+  {"id":"nature","name":"Nature","ability":"Intelligence"},
+  {"id":"perception","name":"Perception","ability":"Wisdom"},
+  {"id":"performance","name":"Performance","ability":"Charisma"},
+  {"id":"persuasion","name":"Persuasion","ability":"Charisma"},
+  {"id":"religion","name":"Religion","ability":"Intelligence"},
+  {"id":"sleight-of-hand","name":"Sleight of Hand","ability":"Dexterity"},
+  {"id":"stealth","name":"Stealth","ability":"Dexterity"},
+  {"id":"survival","name":"Survival","ability":"Wisdom"}
+]

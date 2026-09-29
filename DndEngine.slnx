@@ -1,0 +1,13 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/DndEngine.Api/DndEngine.Api.csproj" />
+    <Project Path="src/DndEngine.Application/DndEngine.Application.csproj" />
+    <Project Path="src/DndEngine.Domain/DndEngine.Domain.csproj" />
+    <Project Path="src/DndEngine.Infrastructure/DndEngine.Infrastructure.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/DndEngine.Application.Tests/DndEngine.Application.Tests.csproj" />
+    <Project Path="tests/DndEngine.Domain.Tests/DndEngine.Domain.Tests.csproj" />
+    <Project Path="tests/DndEngine.IntegrationTests/DndEngine.IntegrationTests.csproj" />
+  </Folder>
+</Solution>
