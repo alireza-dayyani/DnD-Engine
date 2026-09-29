@@ -22,9 +22,12 @@ public sealed class RulesDbContext(DbContextOptions<RulesDbContext> options) : D
 {
     public DbSet<RulesetRow> Rulesets => Set<RulesetRow>();
     public DbSet<SkillRow> Skills => Set<SkillRow>();
+    public DbSet<CombatContentRow> CombatContent => Set<CombatContentRow>();
     protected override void OnModelCreating(ModelBuilder model)
     {
         model.Entity<RulesetRow>().HasKey(x => new { x.Id, x.Version });
+        model.Entity<CombatContentRow>().HasKey(x => new { x.RulesetId, x.Version });
+        model.Entity<CombatContentRow>().HasOne<RulesetRow>().WithMany().HasForeignKey(x => new { x.RulesetId, x.Version }).OnDelete(DeleteBehavior.Restrict);
         model.Entity<SkillRow>().HasKey(x => new { x.RulesetId, x.Version, x.Id });
         model.Entity<SkillRow>().HasOne<RulesetRow>().WithMany().HasForeignKey(x => new { x.RulesetId, x.Version }).OnDelete(DeleteBehavior.Restrict);
     }

@@ -62,7 +62,7 @@ public sealed class HitPoints
         if (replaceExisting) State = before with { Temporary = amount };
         return new("TemporaryHitPoints", amount, before, State, 0, 0, 0, 0);
     }
-    public HealthChange DeathSave(IDiceRoller dice)
+    public HealthChange DeathSave(IDiceRoller dice, int modifier = 0)
     {
         RequireAlive();
         if (State.Current != 0 || State.Stable) throw new RuleViolation("Death save requires a dying character at zero HP.");
@@ -71,8 +71,8 @@ public sealed class HitPoints
         if (roll == 20) Heal(1);
         else
         {
-            var successes = before.DeathSuccesses + (roll >= 10 ? 1 : 0);
-            var failures = before.DeathFailures + (roll == 1 ? 2 : roll < 10 ? 1 : 0);
+            var successes = before.DeathSuccesses + (roll != 1 && roll + modifier >= 10 ? 1 : 0);
+            var failures = before.DeathFailures + (roll == 1 ? 2 : roll + modifier < 10 ? 1 : 0);
             var stable = successes >= 3;
             State = before with { Stable = stable, Dead = failures >= 3,
                 DeathSuccesses = stable ? 0 : successes, DeathFailures = stable ? 0 : Math.Min(3, failures) };
@@ -83,4 +83,11 @@ public sealed class HitPoints
     {
         if (State.Dead) throw new RuleViolation("Character is dead; this operation cannot revive them.");
     }
+    // Explicit rule transitions used by the combat layer; ordinary Phase 1 behavior is unchanged.
+    public void SetProne(bool prone)
+    {
+        if (!prone && (State.Unconscious || State.Dead)) throw new RuleViolation("Cannot stand while unconscious or dead.");
+        State = State with { Prone = prone };
+    }
+    public void Die() => State = State with { Current = 0, Dead = true, Stable = false, Prone = true };
 }

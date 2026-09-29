@@ -1,5 +1,15 @@
 # Rules sources and license
 
+## Phase 2 research (2026-09-29)
+
+Read the same official 5.2.1 PDF for: combat/initiative/ties/surprise/rounds/turns (p.13); actions, bonus actions and reactions (pp.9–10); movement, difficult terrain, unseen targets (p.14); cover/range/close ranged attacks/opportunity attacks (p.15); weapon damage, fixed damage and critical dice (p.16); mitigation order and zero-HP policies (pp.17–18); weapon properties and all eight mastery properties (pp.89–90), all 38 weapons (p.91); all 13 damage types (p.180); all 15 conditions in the glossary (pp.177–191).
+
+Key revised rules: surprise is initiative disadvantage; tied PCs choose their order, GM resolves monster/mixed ties (no invented Dexterity tie breaker). Identical creatures share one initiative roll. Heavy uses Strength 13 for melee weapons or Dexterity 13 for ranged weapons. Light permits one different-Light-weapon bonus attack without a positive ability damage modifier. Loading limits a weapon to one shot per action/bonus/reaction. Criticals double damage dice, not flat bonuses; fixed Blowgun damage gets no ability modifier. Resistance halves and rounds down before vulnerability doubles; immunity prevents damage entirely. Stunned grants Incapacitated but does NOT itself set Speed to zero in this SRD. Grappled imposes attack disadvantage against targets other than the grappler. Exhaustion applies −2 per level to D20 Tests, −5 feet per level to speed, death at six. Invisible's attack benefits do not apply against a creature that can see it; it grants initiative advantage. Petrified grants resistance to all damage and immunity to Poisoned, not blanket Poison damage immunity.
+
+Condition entries researched: Blinded p.177; Charmed p.178; Deafened/Exhaustion p.181; Frightened/Grappled p.182; Incapacitated/Invisible p.184; Paralyzed/Petrified/Poisoned/Prone p.186; Restrained p.187; Stunned p.189; Unconscious p.191. The engine applies in-scope mechanical effects with source-aware instances and explicit spatial facts. Social/lore, concentration/spell state, carrying transformed equipment, and unsupported action types remain outside Phase 2. Mastery content is definition-only; no automatic mastery eligibility or effect is claimed.
+
+Initiative ties require explicit caller-provided order preserving descending totals. The API has no players/GM authentication: it records the order as an adjudication, with tie groups labeled Players or GameMaster. Grouping identical monsters is an explicit GM assertion; differing effective initiative modifiers/advantage states are rejected. Opportunity attacks are requested before the provoking move; movement geometry and whether a creature actually leaves reach are caller facts. Engine checks the supported trigger, melee reach, seeing the target, action inhibition, reaction token, and Disengage.
+
 Checked **2026-09-29**. Engine identity: `dnd-5.5`, SRD version `5.2.1`. The official landing page identifies 5.2.1 as its latest English download (published May 1, 2025); the page itself reports an update on March 2, 2026. No newer release is listed there. The engine does not claim support for future errata automatically.
 
 Official sources read:
@@ -8,7 +18,7 @@ Official sources read:
 - [Official English SRD 5.2.1 PDF](https://media.dndbeyond.com/compendium-images/srd/5.2/SRD_CC_v5.2.1.pdf). Relevant sections, not all 364 pages, were read for this slice.
 - [CC BY 4.0 deed](https://creativecommons.org/licenses/by/4.0/) and [legal code](https://creativecommons.org/licenses/by/4.0/legalcode).
 
-## Source-to-behavior map
+## Phase 1 source-to-behavior map (preserved standalone endpoints)
 
 Page numbers below are the PDF's printed pages.
 
@@ -25,12 +35,12 @@ Page numbers below are the PDF's printed pages.
 | p. 7, AC | Default base AC 10 + Dexterity modifier | Sheet import default; alternate AC treated as pre-resolved sheet input |
 | pp. 16–17, HP/healing | Damage loses HP, floor at zero; healing capped at max | Before/after results and boundary tests |
 | pp. 17–18, zero HP | Massive remaining damage at least max HP kills; otherwise unconscious; damage at zero adds failures, two on critical | PC health state and regression tests |
-| pp. 17–18, death saves | 10+ succeeds, natural 1 adds two failures, natural 20 heals one; three successes stabilize, three failures kill; counters reset on stabilization/healing | Explicit basic death-save use case; no turn scheduling |
+| pp. 17–18, death saves | 10+ succeeds, natural 1 adds two failures, natural 20 heals one; three successes stabilize, three failures kill; counters reset on stabilization/healing | Standalone basic death-save use case; Phase 2 schedules saves at turn start |
 | p. 18, temporary HP | Buffer first, never stacks, recipient chooses replacement, healing does not restore it or consciousness | Explicit replacement boolean; tests |
 | p. 18, temporary HP duration | Expires when depleted or on completing a Long Rest | Depletion supported; full rest/time progression deferred, no claim of automatic rest expiry |
-| p. 191, Unconscious | Strength/Dexterity saves automatically fail; unconsciousness confers Prone, which remains after waking | Save auto-outcome and persistent Prone flag; full condition engine deferred |
+| p. 191, Unconscious | Strength/Dexterity saves automatically fail; unconsciousness confers Prone, which remains after waking | Save auto-outcome and persistent Prone flag; Phase 2 adds independent condition instances |
 
-## Scope boundaries and interpretation notes
+## Phase 1 endpoint boundaries and interpretation notes
 
 - Only ordinary checks and saves are resolved. No tools, Expertise, fractional proficiency, Heroic Inspiration, rerolls, Reliable Talent, Exhaustion, special save features, or passive checks. These are not silently simulated through older rules. A caller may supply a known flat circumstance modifier; the engine records it but does not verify its feature source.
 - Active ability/skill checks while unconscious are rejected as unsupported actions. Other ability saves still roll unless an implemented auto-failure applies.

@@ -52,12 +52,12 @@ public sealed class SqliteCampaignStore(CampaignDbContext db) : ICampaignStore
             x.OccurredAtUtc, new(x.RulesetId, x.SrdVersion), x.SchemaVersion, x.CharacterRevision,
             JsonSerializer.Deserialize<JsonElement>(x.DataJson))).ToArray();
     }
-    private static CharacterRow ToRow(Character c) => new() { Id = c.Id, CampaignId = c.CampaignId, Name = c.Name,
+    internal static CharacterRow ToRow(Character c) => new() { Id = c.Id, CampaignId = c.CampaignId, Name = c.Name,
         Level = c.Level.Value, ArmorClass = c.ArmorClass, Revision = c.Revision,
         AbilitiesJson = JsonSerializer.Serialize(c.Abilities.ToDictionary(x => x.Key, x => x.Value.Value)),
         SkillsJson = JsonSerializer.Serialize(c.SkillProficiencies), SavesJson = JsonSerializer.Serialize(c.SavingThrowProficiencies),
         HealthJson = JsonSerializer.Serialize(c.Health.State) };
-    private static EventRow ToRow(CampaignEvent e) => new() { EventId = e.EventId, CampaignId = e.CampaignId,
+    internal static EventRow ToRow(CampaignEvent e) => new() { EventId = e.EventId, CampaignId = e.CampaignId,
         CharacterId = e.CharacterId, Type = e.Type, OccurredAtUtc = e.OccurredAtUtc, RulesetId = e.Ruleset.Id,
         SrdVersion = e.Ruleset.Version, SchemaVersion = e.SchemaVersion, CharacterRevision = e.CharacterRevision,
         DataJson = e.Data.GetRawText() };

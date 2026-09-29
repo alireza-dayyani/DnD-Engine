@@ -1,0 +1,2 @@
+# Content-pack hashes must not depend on a checkout's line-ending conversion.
+src/DndEngine.Infrastructure/Content/combat-5.2.1.json text eol=lf

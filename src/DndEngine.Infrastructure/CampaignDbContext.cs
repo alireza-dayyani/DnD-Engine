@@ -40,9 +40,20 @@ public sealed class CampaignDbContext(DbContextOptions<CampaignDbContext> option
     public DbSet<CampaignRow> Campaigns => Set<CampaignRow>();
     public DbSet<CharacterRow> Characters => Set<CharacterRow>();
     public DbSet<EventRow> Events => Set<EventRow>();
+    public DbSet<CombatProfileRow> CombatProfiles => Set<CombatProfileRow>();
+    public DbSet<EncounterRow> Encounters => Set<EncounterRow>();
+    public DbSet<CombatMembershipRow> CombatMemberships => Set<CombatMembershipRow>();
     protected override void OnModelCreating(ModelBuilder model)
     {
         model.Entity<CampaignRow>().HasKey(x => x.Id);
+        model.Entity<CombatProfileRow>().HasKey(x => x.CharacterId);
+        model.Entity<CombatProfileRow>().HasOne<CharacterRow>().WithMany().HasForeignKey(x => x.CharacterId).OnDelete(DeleteBehavior.Restrict);
+        model.Entity<EncounterRow>().HasKey(x => x.Id);
+        model.Entity<EncounterRow>().Property(x => x.Revision).IsConcurrencyToken();
+        model.Entity<EncounterRow>().HasOne<CampaignRow>().WithMany().HasForeignKey(x => x.CampaignId).OnDelete(DeleteBehavior.Restrict);
+        model.Entity<CombatMembershipRow>().HasKey(x => x.CharacterId);
+        model.Entity<CombatMembershipRow>().HasOne<CharacterRow>().WithMany().HasForeignKey(x => x.CharacterId).OnDelete(DeleteBehavior.Restrict);
+        model.Entity<CombatMembershipRow>().HasOne<EncounterRow>().WithMany().HasForeignKey(x => x.EncounterId).OnDelete(DeleteBehavior.Restrict);
         model.Entity<CharacterRow>().HasKey(x => x.Id);
         model.Entity<CharacterRow>().Property(x => x.Revision).IsConcurrencyToken();
         model.Entity<CharacterRow>().HasOne<CampaignRow>().WithMany().HasForeignKey(x => x.CampaignId).OnDelete(DeleteBehavior.Restrict);

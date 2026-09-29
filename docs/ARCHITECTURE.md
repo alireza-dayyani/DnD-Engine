@@ -44,6 +44,26 @@ Events are an append-only application history, not event sourcing: reads use cur
 
 Commands have no retry/idempotency token yet. After uncertain network delivery, inspect state/events before retrying. SQLite and optimistic concurrency suffice for local single-user use. Distributed writers, multiplayer, authentication, queues, caching, and server infrastructure are deliberately absent.
 
+## Combat foundation (Phase 2)
+
+`CombatService` adds tool-shaped use cases behind `ICombatStore` and `ICombatCatalog`. `CombatEncounter` owns transitions, initiative, order and resource budgets. `WeaponAttackResolver` composes weapon rules, `ConditionEffects`, `DamageResolver`, and the existing `HitPoints`. The API only binds/routes requests. Mechanics depend on character IDs, scores, capabilities and health, never personality, lore or narrative interpretation.
+
+`rules.db` adds one version-keyed `CombatContent` row containing the small canonical weapons/conditions/masteries pack as validated JSON and its independent SHA-256. Existing skill bytes and `Rulesets.ContentHash` are unchanged. Pack import checks counts, identifiers, all condition kinds, dice/properties/ranges, mastery references and exact installed content. Definitions inherit source URL/license from their ruleset and retain printed page references. No campaign state is stored here.
+
+`campaign.db` adds `CombatProfiles` (character-owned capabilities, weapon instances, condition instances), `Encounters` (snapshot plus optimistic revision), and `CombatMemberships` (unique CharacterId). HP remains solely in `Characters`; encounter members reference it. Unique membership prevents parallel unfinished encounters from spending one character's resources twice. Completing combat releases memberships; dead slots remain in order and may only be advanced, not acted from.
+
+Combat writes increment the encounter revision and every participating character revision, guarding the full mechanical read set, including targets and condition sources. The loader reads a character revision before its profile. Profiles share the character concurrency token. One EF `SaveChanges` transaction commits encounter, profiles, HP, memberships and all events. A stale revision or unique-state conflict yields 409; there is no automatic retry or reroll. This deliberately coarse concurrency scope suits local combat and avoids lost updates across Phase 1 and Phase 2 commands. GET is a read view, not a locking snapshot during concurrent writers; reload after conflicts. Restart checks use quiescent committed state.
+
+Combat events use the existing schema-2 casing/enums and add an envelope with encounter ID/revision, round, global turn number and optional subject combatant. `AttackMade` contains participants, owned/canonical weapon IDs, source, input spatial facts/modifiers, all dice, outcome, mitigation, HP before/after, and resources. It records hits, misses, criticals, downing and deaths without duplicating those facts in several events. A query can identify a final blow by `health.before.dead=false` and `health.after.dead=true`. Membership events resolve combatant IDs to character IDs. Condition events identify their subject and source. Turn, round, expiry and death-save events record meaningful transitions. Events do not invent faction or narrative consequences.
+
+### Extending effects
+
+`ConditionEffects` derives action inhibition, Speed, D20 penalties, attack advantage/disadvantage, targeting restrictions, automatic saves and resistance from source-bearing instances plus HP. Ordinary duplicate condition sources do not multiply their effects; Exhaustion counts levels. `DamageResolver` folds imported defenses and condition resistance in one pipeline. `WeaponAttackResolver` consumes these facets instead of branching on weapon names. This is deliberately a small set of C# components, not an interpreter or universal effect schema.
+
+Future features can supply additional resolved capabilities or introduce focused components for save/attack/damage facets. Before adding a source, define its stacking, expiry and interaction tests; preserve separate source instances. `AttacksPerAction` already separates the action token from individual attack uses. Mastery definitions do not grant mastery or execute effects. General spell triggers, concentration and eligibility remain separate future work.
+
+Explicit caller facts cover distance, cover, visibility after senses, nearby ranged threats, visible fear sources, and whether movement provokes an opportunity attack. The engine validates range, resources, conditions and supplied facts; it has no map to independently establish them. Unsupported geometry, grip/equipment location, grappling initiation/escape, special speeds and noncombat timed recovery must not be inferred from successful calls. See `COMBAT_API.md` for these boundaries.
+
 ## Version expansion
 
 Current commands reject versions other than 5.2.1, even if someone manually installs rows for another version. Before 5.2.2 support, add the content alongside 5.2.1 and introduce explicit version-specific resolver dispatch at the Application boundary; keep regression tests for both. Do not change the existing resolver behavior and assume the database pin alone preserves rules. Future rule-version upgrades must be explicit campaign operations with an audit event.

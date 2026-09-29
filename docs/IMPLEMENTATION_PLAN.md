@@ -1,5 +1,7 @@
 # Phase 1 implementation plan
 
+Historical Phase 1 plan. The completed continuation is tracked in [Phase 2 plan](PHASE2_PLAN.md) and [Phase 2 report](PHASE2_REPORT.md); Phase 1 scope statements below describe the original delivery.
+
 Repository inspected 2026-09-29: empty; .NET SDK 10.0.400 available. Official SRD landing page identifies 5.2.1 as latest. Relevant source sections read: pp. 5–9, 16–18, and Unconscious p. 191; legal notice p. 1 and CC BY 4.0.
 
 1. Domain: validated ability scores, character level and proficiency, dice expressions/roller port, character aggregate with HP/death transitions, structured checks.

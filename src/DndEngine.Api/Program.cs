@@ -37,6 +37,7 @@ app.MapPost("/characters/{id:guid}/damage", (Guid id, DamageRequest request, Mec
 app.MapPost("/characters/{id:guid}/heal", (Guid id, HealingRequest request, MechanicsService service, CancellationToken ct) => service.HealAsync(id, request, ct));
 app.MapPost("/characters/{id:guid}/temporary-hp", (Guid id, TemporaryHpRequest request, MechanicsService service, CancellationToken ct) => service.TemporaryHpAsync(id, request, ct));
 app.MapPost("/characters/{id:guid}/death-saving-throws", (Guid id, MechanicsService service, CancellationToken ct) => service.DeathSaveAsync(id, ct));
+app.MapCombat();
 await app.Services.InitializeDndEngineAsync();
 await app.RunAsync();
 public partial class Program;

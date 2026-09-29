@@ -1,0 +1,882 @@
+{
+  "weapons": [
+    {
+      "id": "club",
+      "name": "Club",
+      "category": "Simple",
+      "kind": "Melee",
+      "damageDice": "1d4",
+      "fixedDamage": 0,
+      "damageType": "Bludgeoning",
+      "properties": [
+        "Light"
+      ],
+      "mastery": "slow",
+      "normalRange": 0,
+      "longRange": 0,
+      "versatileDice": null,
+      "ammunition": null,
+      "mountedOneHanded": false,
+      "source": "SRD-5.2.1 pp.89-91"
+    },
+    {
+      "id": "dagger",
+      "name": "Dagger",
+      "category": "Simple",
+      "kind": "Melee",
+      "damageDice": "1d4",
+      "fixedDamage": 0,
+      "damageType": "Piercing",
+      "properties": [
+        "Finesse",
+        "Light",
+        "Thrown"
+      ],
+      "mastery": "nick",
+      "normalRange": 20,
+      "longRange": 60,
+      "versatileDice": null,
+      "ammunition": null,
+      "mountedOneHanded": false,
+      "source": "SRD-5.2.1 pp.89-91"
+    },
+    {
+      "id": "greatclub",
+      "name": "Greatclub",
+      "category": "Simple",
+      "kind": "Melee",
+      "damageDice": "1d8",
+      "fixedDamage": 0,
+      "damageType": "Bludgeoning",
+      "properties": [
+        "TwoHanded"
+      ],
+      "mastery": "push",
+      "normalRange": 0,
+      "longRange": 0,
+      "versatileDice": null,
+      "ammunition": null,
+      "mountedOneHanded": false,
+      "source": "SRD-5.2.1 pp.89-91"
+    },
+    {
+      "id": "handaxe",
+      "name": "Handaxe",
+      "category": "Simple",
+      "kind": "Melee",
+      "damageDice": "1d6",
+      "fixedDamage": 0,
+      "damageType": "Slashing",
+      "properties": [
+        "Light",
+        "Thrown"
+      ],
+      "mastery": "vex",
+      "normalRange": 20,
+      "longRange": 60,
+      "versatileDice": null,
+      "ammunition": null,
+      "mountedOneHanded": false,
+      "source": "SRD-5.2.1 pp.89-91"
+    },
+    {
+      "id": "javelin",
+      "name": "Javelin",
+      "category": "Simple",
+      "kind": "Melee",
+      "damageDice": "1d6",
+      "fixedDamage": 0,
+      "damageType": "Piercing",
+      "properties": [
+        "Thrown"
+      ],
+      "mastery": "slow",
+      "normalRange": 30,
+      "longRange": 120,
+      "versatileDice": null,
+      "ammunition": null,
+      "mountedOneHanded": false,
+      "source": "SRD-5.2.1 pp.89-91"
+    },
+    {
+      "id": "light-hammer",
+      "name": "Light Hammer",
+      "category": "Simple",
+      "kind": "Melee",
+      "damageDice": "1d4",
+      "fixedDamage": 0,
+      "damageType": "Bludgeoning",
+      "properties": [
+        "Light",
+        "Thrown"
+      ],
+      "mastery": "nick",
+      "normalRange": 20,
+      "longRange": 60,
+      "versatileDice": null,
+      "ammunition": null,
+      "mountedOneHanded": false,
+      "source": "SRD-5.2.1 pp.89-91"
+    },
+    {
+      "id": "mace",
+      "name": "Mace",
+      "category": "Simple",
+      "kind": "Melee",
+      "damageDice": "1d6",
+      "fixedDamage": 0,
+      "damageType": "Bludgeoning",
+      "properties": [],
+      "mastery": "sap",
+      "normalRange": 0,
+      "longRange": 0,
+      "versatileDice": null,
+      "ammunition": null,
+      "mountedOneHanded": false,
+      "source": "SRD-5.2.1 pp.89-91"
+    },
+    {
+      "id": "quarterstaff",
+      "name": "Quarterstaff",
+      "category": "Simple",
+      "kind": "Melee",
+      "damageDice": "1d6",
+      "fixedDamage": 0,
+      "damageType": "Bludgeoning",
+      "properties": [
+        "Versatile"
+      ],
+      "mastery": "topple",
+      "normalRange": 0,
+      "longRange": 0,
+      "versatileDice": "1d8",
+      "ammunition": null,
+      "mountedOneHanded": false,
+      "source": "SRD-5.2.1 pp.89-91"
+    },
+    {
+      "id": "sickle",
+      "name": "Sickle",
+      "category": "Simple",
+      "kind": "Melee",
+      "damageDice": "1d4",
+      "fixedDamage": 0,
+      "damageType": "Slashing",
+      "properties": [
+        "Light"
+      ],
+      "mastery": "nick",
+      "normalRange": 0,
+      "longRange": 0,
+      "versatileDice": null,
+      "ammunition": null,
+      "mountedOneHanded": false,
+      "source": "SRD-5.2.1 pp.89-91"
+    },
+    {
+      "id": "spear",
+      "name": "Spear",
+      "category": "Simple",
+      "kind": "Melee",
+      "damageDice": "1d6",
+      "fixedDamage": 0,
+      "damageType": "Piercing",
+      "properties": [
+        "Thrown",
+        "Versatile"
+      ],
+      "mastery": "sap",
+      "normalRange": 20,
+      "longRange": 60,
+      "versatileDice": "1d8",
+      "ammunition": null,
+      "mountedOneHanded": false,
+      "source": "SRD-5.2.1 pp.89-91"
+    },
+    {
+      "id": "dart",
+      "name": "Dart",
+      "category": "Simple",
+      "kind": "Ranged",
+      "damageDice": "1d4",
+      "fixedDamage": 0,
+      "damageType": "Piercing",
+      "properties": [
+        "Finesse",
+        "Thrown"
+      ],
+      "mastery": "vex",
+      "normalRange": 20,
+      "longRange": 60,
+      "versatileDice": null,
+      "ammunition": null,
+      "mountedOneHanded": false,
+      "source": "SRD-5.2.1 pp.89-91"
+    },
+    {
+      "id": "light-crossbow",
+      "name": "Light Crossbow",
+      "category": "Simple",
+      "kind": "Ranged",
+      "damageDice": "1d8",
+      "fixedDamage": 0,
+      "damageType": "Piercing",
+      "properties": [
+        "Ammunition",
+        "Loading",
+        "TwoHanded"
+      ],
+      "mastery": "slow",
+      "normalRange": 80,
+      "longRange": 320,
+      "versatileDice": null,
+      "ammunition": "bolt",
+      "mountedOneHanded": false,
+      "source": "SRD-5.2.1 pp.89-91"
+    },
+    {
+      "id": "shortbow",
+      "name": "Shortbow",
+      "category": "Simple",
+      "kind": "Ranged",
+      "damageDice": "1d6",
+      "fixedDamage": 0,
+      "damageType": "Piercing",
+      "properties": [
+        "Ammunition",
+        "TwoHanded"
+      ],
+      "mastery": "vex",
+      "normalRange": 80,
+      "longRange": 320,
+      "versatileDice": null,
+      "ammunition": "arrow",
+      "mountedOneHanded": false,
+      "source": "SRD-5.2.1 pp.89-91"
+    },
+    {
+      "id": "sling",
+      "name": "Sling",
+      "category": "Simple",
+      "kind": "Ranged",
+      "damageDice": "1d4",
+      "fixedDamage": 0,
+      "damageType": "Bludgeoning",
+      "properties": [
+        "Ammunition"
+      ],
+      "mastery": "slow",
+      "normalRange": 30,
+      "longRange": 120,
+      "versatileDice": null,
+      "ammunition": "bullet",
+      "mountedOneHanded": false,
+      "source": "SRD-5.2.1 pp.89-91"
+    },
+    {
+      "id": "battleaxe",
+      "name": "Battleaxe",
+      "category": "Martial",
+      "kind": "Melee",
+      "damageDice": "1d8",
+      "fixedDamage": 0,
+      "damageType": "Slashing",
+      "properties": [
+        "Versatile"
+      ],
+      "mastery": "topple",
+      "normalRange": 0,
+      "longRange": 0,
+      "versatileDice": "1d10",
+      "ammunition": null,
+      "mountedOneHanded": false,
+      "source": "SRD-5.2.1 pp.89-91"
+    },
+    {
+      "id": "flail",
+      "name": "Flail",
+      "category": "Martial",
+      "kind": "Melee",
+      "damageDice": "1d8",
+      "fixedDamage": 0,
+      "damageType": "Bludgeoning",
+      "properties": [],
+      "mastery": "sap",
+      "normalRange": 0,
+      "longRange": 0,
+      "versatileDice": null,
+      "ammunition": null,
+      "mountedOneHanded": false,
+      "source": "SRD-5.2.1 pp.89-91"
+    },
+    {
+      "id": "glaive",
+      "name": "Glaive",
+      "category": "Martial",
+      "kind": "Melee",
+      "damageDice": "1d10",
+      "fixedDamage": 0,
+      "damageType": "Slashing",
+      "properties": [
+        "Heavy",
+        "Reach",
+        "TwoHanded"
+      ],
+      "mastery": "graze",
+      "normalRange": 0,
+      "longRange": 0,
+      "versatileDice": null,
+      "ammunition": null,
+      "mountedOneHanded": false,
+      "source": "SRD-5.2.1 pp.89-91"
+    },
+    {
+      "id": "greataxe",
+      "name": "Greataxe",
+      "category": "Martial",
+      "kind": "Melee",
+      "damageDice": "1d12",
+      "fixedDamage": 0,
+      "damageType": "Slashing",
+      "properties": [
+        "Heavy",
+        "TwoHanded"
+      ],
+      "mastery": "cleave",
+      "normalRange": 0,
+      "longRange": 0,
+      "versatileDice": null,
+      "ammunition": null,
+      "mountedOneHanded": false,
+      "source": "SRD-5.2.1 pp.89-91"
+    },
+    {
+      "id": "greatsword",
+      "name": "Greatsword",
+      "category": "Martial",
+      "kind": "Melee",
+      "damageDice": "2d6",
+      "fixedDamage": 0,
+      "damageType": "Slashing",
+      "properties": [
+        "Heavy",
+        "TwoHanded"
+      ],
+      "mastery": "graze",
+      "normalRange": 0,
+      "longRange": 0,
+      "versatileDice": null,
+      "ammunition": null,
+      "mountedOneHanded": false,
+      "source": "SRD-5.2.1 pp.89-91"
+    },
+    {
+      "id": "halberd",
+      "name": "Halberd",
+      "category": "Martial",
+      "kind": "Melee",
+      "damageDice": "1d10",
+      "fixedDamage": 0,
+      "damageType": "Slashing",
+      "properties": [
+        "Heavy",
+        "Reach",
+        "TwoHanded"
+      ],
+      "mastery": "cleave",
+      "normalRange": 0,
+      "longRange": 0,
+      "versatileDice": null,
+      "ammunition": null,
+      "mountedOneHanded": false,
+      "source": "SRD-5.2.1 pp.89-91"
+    },
+    {
+      "id": "lance",
+      "name": "Lance",
+      "category": "Martial",
+      "kind": "Melee",
+      "damageDice": "1d10",
+      "fixedDamage": 0,
+      "damageType": "Piercing",
+      "properties": [
+        "Heavy",
+        "Reach",
+        "TwoHanded"
+      ],
+      "mastery": "topple",
+      "normalRange": 0,
+      "longRange": 0,
+      "versatileDice": null,
+      "ammunition": null,
+      "mountedOneHanded": true,
+      "source": "SRD-5.2.1 pp.89-91"
+    },
+    {
+      "id": "longsword",
+      "name": "Longsword",
+      "category": "Martial",
+      "kind": "Melee",
+      "damageDice": "1d8",
+      "fixedDamage": 0,
+      "damageType": "Slashing",
+      "properties": [
+        "Versatile"
+      ],
+      "mastery": "sap",
+      "normalRange": 0,
+      "longRange": 0,
+      "versatileDice": "1d10",
+      "ammunition": null,
+      "mountedOneHanded": false,
+      "source": "SRD-5.2.1 pp.89-91"
+    },
+    {
+      "id": "maul",
+      "name": "Maul",
+      "category": "Martial",
+      "kind": "Melee",
+      "damageDice": "2d6",
+      "fixedDamage": 0,
+      "damageType": "Bludgeoning",
+      "properties": [
+        "Heavy",
+        "TwoHanded"
+      ],
+      "mastery": "topple",
+      "normalRange": 0,
+      "longRange": 0,
+      "versatileDice": null,
+      "ammunition": null,
+      "mountedOneHanded": false,
+      "source": "SRD-5.2.1 pp.89-91"
+    },
+    {
+      "id": "morningstar",
+      "name": "Morningstar",
+      "category": "Martial",
+      "kind": "Melee",
+      "damageDice": "1d8",
+      "fixedDamage": 0,
+      "damageType": "Piercing",
+      "properties": [],
+      "mastery": "sap",
+      "normalRange": 0,
+      "longRange": 0,
+      "versatileDice": null,
+      "ammunition": null,
+      "mountedOneHanded": false,
+      "source": "SRD-5.2.1 pp.89-91"
+    },
+    {
+      "id": "pike",
+      "name": "Pike",
+      "category": "Martial",
+      "kind": "Melee",
+      "damageDice": "1d10",
+      "fixedDamage": 0,
+      "damageType": "Piercing",
+      "properties": [
+        "Heavy",
+        "Reach",
+        "TwoHanded"
+      ],
+      "mastery": "push",
+      "normalRange": 0,
+      "longRange": 0,
+      "versatileDice": null,
+      "ammunition": null,
+      "mountedOneHanded": false,
+      "source": "SRD-5.2.1 pp.89-91"
+    },
+    {
+      "id": "rapier",
+      "name": "Rapier",
+      "category": "Martial",
+      "kind": "Melee",
+      "damageDice": "1d8",
+      "fixedDamage": 0,
+      "damageType": "Piercing",
+      "properties": [
+        "Finesse"
+      ],
+      "mastery": "vex",
+      "normalRange": 0,
+      "longRange": 0,
+      "versatileDice": null,
+      "ammunition": null,
+      "mountedOneHanded": false,
+      "source": "SRD-5.2.1 pp.89-91"
+    },
+    {
+      "id": "scimitar",
+      "name": "Scimitar",
+      "category": "Martial",
+      "kind": "Melee",
+      "damageDice": "1d6",
+      "fixedDamage": 0,
+      "damageType": "Slashing",
+      "properties": [
+        "Finesse",
+        "Light"
+      ],
+      "mastery": "nick",
+      "normalRange": 0,
+      "longRange": 0,
+      "versatileDice": null,
+      "ammunition": null,
+      "mountedOneHanded": false,
+      "source": "SRD-5.2.1 pp.89-91"
+    },
+    {
+      "id": "shortsword",
+      "name": "Shortsword",
+      "category": "Martial",
+      "kind": "Melee",
+      "damageDice": "1d6",
+      "fixedDamage": 0,
+      "damageType": "Piercing",
+      "properties": [
+        "Finesse",
+        "Light"
+      ],
+      "mastery": "vex",
+      "normalRange": 0,
+      "longRange": 0,
+      "versatileDice": null,
+      "ammunition": null,
+      "mountedOneHanded": false,
+      "source": "SRD-5.2.1 pp.89-91"
+    },
+    {
+      "id": "trident",
+      "name": "Trident",
+      "category": "Martial",
+      "kind": "Melee",
+      "damageDice": "1d8",
+      "fixedDamage": 0,
+      "damageType": "Piercing",
+      "properties": [
+        "Thrown",
+        "Versatile"
+      ],
+      "mastery": "topple",
+      "normalRange": 20,
+      "longRange": 60,
+      "versatileDice": "1d10",
+      "ammunition": null,
+      "mountedOneHanded": false,
+      "source": "SRD-5.2.1 pp.89-91"
+    },
+    {
+      "id": "warhammer",
+      "name": "Warhammer",
+      "category": "Martial",
+      "kind": "Melee",
+      "damageDice": "1d8",
+      "fixedDamage": 0,
+      "damageType": "Bludgeoning",
+      "properties": [
+        "Versatile"
+      ],
+      "mastery": "push",
+      "normalRange": 0,
+      "longRange": 0,
+      "versatileDice": "1d10",
+      "ammunition": null,
+      "mountedOneHanded": false,
+      "source": "SRD-5.2.1 pp.89-91"
+    },
+    {
+      "id": "war-pick",
+      "name": "War Pick",
+      "category": "Martial",
+      "kind": "Melee",
+      "damageDice": "1d8",
+      "fixedDamage": 0,
+      "damageType": "Piercing",
+      "properties": [
+        "Versatile"
+      ],
+      "mastery": "sap",
+      "normalRange": 0,
+      "longRange": 0,
+      "versatileDice": "1d10",
+      "ammunition": null,
+      "mountedOneHanded": false,
+      "source": "SRD-5.2.1 pp.89-91"
+    },
+    {
+      "id": "whip",
+      "name": "Whip",
+      "category": "Martial",
+      "kind": "Melee",
+      "damageDice": "1d4",
+      "fixedDamage": 0,
+      "damageType": "Slashing",
+      "properties": [
+        "Finesse",
+        "Reach"
+      ],
+      "mastery": "slow",
+      "normalRange": 0,
+      "longRange": 0,
+      "versatileDice": null,
+      "ammunition": null,
+      "mountedOneHanded": false,
+      "source": "SRD-5.2.1 pp.89-91"
+    },
+    {
+      "id": "blowgun",
+      "name": "Blowgun",
+      "category": "Martial",
+      "kind": "Ranged",
+      "damageDice": null,
+      "fixedDamage": 1,
+      "damageType": "Piercing",
+      "properties": [
+        "Ammunition",
+        "Loading"
+      ],
+      "mastery": "vex",
+      "normalRange": 25,
+      "longRange": 100,
+      "versatileDice": null,
+      "ammunition": "needle",
+      "mountedOneHanded": false,
+      "source": "SRD-5.2.1 pp.89-91"
+    },
+    {
+      "id": "hand-crossbow",
+      "name": "Hand Crossbow",
+      "category": "Martial",
+      "kind": "Ranged",
+      "damageDice": "1d6",
+      "fixedDamage": 0,
+      "damageType": "Piercing",
+      "properties": [
+        "Ammunition",
+        "Light",
+        "Loading"
+      ],
+      "mastery": "vex",
+      "normalRange": 30,
+      "longRange": 120,
+      "versatileDice": null,
+      "ammunition": "bolt",
+      "mountedOneHanded": false,
+      "source": "SRD-5.2.1 pp.89-91"
+    },
+    {
+      "id": "heavy-crossbow",
+      "name": "Heavy Crossbow",
+      "category": "Martial",
+      "kind": "Ranged",
+      "damageDice": "1d10",
+      "fixedDamage": 0,
+      "damageType": "Piercing",
+      "properties": [
+        "Ammunition",
+        "Heavy",
+        "Loading",
+        "TwoHanded"
+      ],
+      "mastery": "push",
+      "normalRange": 100,
+      "longRange": 400,
+      "versatileDice": null,
+      "ammunition": "bolt",
+      "mountedOneHanded": false,
+      "source": "SRD-5.2.1 pp.89-91"
+    },
+    {
+      "id": "longbow",
+      "name": "Longbow",
+      "category": "Martial",
+      "kind": "Ranged",
+      "damageDice": "1d8",
+      "fixedDamage": 0,
+      "damageType": "Piercing",
+      "properties": [
+        "Ammunition",
+        "Heavy",
+        "TwoHanded"
+      ],
+      "mastery": "slow",
+      "normalRange": 150,
+      "longRange": 600,
+      "versatileDice": null,
+      "ammunition": "arrow",
+      "mountedOneHanded": false,
+      "source": "SRD-5.2.1 pp.89-91"
+    },
+    {
+      "id": "musket",
+      "name": "Musket",
+      "category": "Martial",
+      "kind": "Ranged",
+      "damageDice": "1d12",
+      "fixedDamage": 0,
+      "damageType": "Piercing",
+      "properties": [
+        "Ammunition",
+        "Loading",
+        "TwoHanded"
+      ],
+      "mastery": "slow",
+      "normalRange": 40,
+      "longRange": 120,
+      "versatileDice": null,
+      "ammunition": "bullet",
+      "mountedOneHanded": false,
+      "source": "SRD-5.2.1 pp.89-91"
+    },
+    {
+      "id": "pistol",
+      "name": "Pistol",
+      "category": "Martial",
+      "kind": "Ranged",
+      "damageDice": "1d10",
+      "fixedDamage": 0,
+      "damageType": "Piercing",
+      "properties": [
+        "Ammunition",
+        "Loading"
+      ],
+      "mastery": "vex",
+      "normalRange": 30,
+      "longRange": 90,
+      "versatileDice": null,
+      "ammunition": "bullet",
+      "mountedOneHanded": false,
+      "source": "SRD-5.2.1 pp.89-91"
+    }
+  ],
+  "conditions": [
+    {
+      "id": "Blinded",
+      "source": "SRD-5.2.1 p.177",
+      "summary": "Sight-dependent checks fail; own attacks have Disadvantage and incoming attacks have Advantage."
+    },
+    {
+      "id": "Charmed",
+      "source": "SRD-5.2.1 p.178",
+      "summary": "Cannot attack or harm the charmer; charmer has Advantage on social interaction checks."
+    },
+    {
+      "id": "Deafened",
+      "source": "SRD-5.2.1 p.181",
+      "summary": "Hearing-dependent checks fail."
+    },
+    {
+      "id": "Exhaustion",
+      "source": "SRD-5.2.1 p.181",
+      "summary": "Each level subtracts 2 from D20 Tests and 5 feet from Speed; level 6 causes death. Long Rest removes one level."
+    },
+    {
+      "id": "Frightened",
+      "source": "SRD-5.2.1 p.182",
+      "summary": "Checks and attacks have Disadvantage while source is visible; cannot willingly move closer to source."
+    },
+    {
+      "id": "Grappled",
+      "source": "SRD-5.2.1 p.182",
+      "summary": "Speed is zero; attacks against creatures other than grappler have Disadvantage. Ends if grappler is Incapacitated or target leaves reach."
+    },
+    {
+      "id": "Incapacitated",
+      "source": "SRD-5.2.1 p.184",
+      "summary": "Cannot take actions, Bonus Actions or Reactions, concentrate or speak; Initiative has Disadvantage."
+    },
+    {
+      "id": "Invisible",
+      "source": "SRD-5.2.1 p.184",
+      "summary": "Initiative has Advantage; unseen attacks have Advantage and attackers have Disadvantage unless they can see the creature."
+    },
+    {
+      "id": "Paralyzed",
+      "source": "SRD-5.2.1 p.186",
+      "summary": "Incapacitated, Speed zero, Strength and Dexterity saves fail; incoming attacks have Advantage and hits within 5 feet are critical."
+    },
+    {
+      "id": "Petrified",
+      "source": "SRD-5.2.1 p.186",
+      "summary": "Incapacitated, Speed zero, unaware; Strength and Dexterity saves fail, incoming attacks have Advantage, resistance to all damage and immunity to Poisoned."
+    },
+    {
+      "id": "Poisoned",
+      "source": "SRD-5.2.1 p.186",
+      "summary": "Attacks and ability checks have Disadvantage."
+    },
+    {
+      "id": "Prone",
+      "source": "SRD-5.2.1 p.186",
+      "summary": "Crawl or spend half Speed to stand; own attacks have Disadvantage. Attacks from within 5 feet have Advantage, others Disadvantage."
+    },
+    {
+      "id": "Restrained",
+      "source": "SRD-5.2.1 p.187",
+      "summary": "Speed zero; own attacks and Dexterity saves have Disadvantage, incoming attacks have Advantage."
+    },
+    {
+      "id": "Stunned",
+      "source": "SRD-5.2.1 p.189",
+      "summary": "Incapacitated; Strength and Dexterity saves fail; incoming attacks have Advantage."
+    },
+    {
+      "id": "Unconscious",
+      "source": "SRD-5.2.1 p.191",
+      "summary": "Incapacitated, Prone, unaware, drops held objects, Speed zero; Strength and Dexterity saves fail; incoming attacks have Advantage, hits within 5 feet are critical."
+    }
+  ],
+  "masteries": [
+    {
+      "id": "cleave",
+      "source": "SRD-5.2.1 p.90",
+      "summary": "Once per turn after a melee hit, attack a second creature within 5 feet of the first and within reach; omit positive ability modifier from its damage.",
+      "automated": false
+    },
+    {
+      "id": "graze",
+      "source": "SRD-5.2.1 p.90",
+      "summary": "On a miss, deal damage equal to the attacking ability modifier; only increasing that modifier increases this damage.",
+      "automated": false
+    },
+    {
+      "id": "nick",
+      "source": "SRD-5.2.1 p.90",
+      "summary": "Make the Light extra attack within the Attack action instead of a Bonus Action, once per turn.",
+      "automated": false
+    },
+    {
+      "id": "push",
+      "source": "SRD-5.2.1 p.90",
+      "summary": "After a hit, push a Large or smaller creature up to 10 feet straight away.",
+      "automated": false
+    },
+    {
+      "id": "sap",
+      "source": "SRD-5.2.1 p.90",
+      "summary": "After a hit, target has Disadvantage on its next attack before the start of your next turn.",
+      "automated": false
+    },
+    {
+      "id": "slow",
+      "source": "SRD-5.2.1 p.90",
+      "summary": "After a damaging hit, reduce Speed by 10 feet until the start of your next turn; does not stack.",
+      "automated": false
+    },
+    {
+      "id": "topple",
+      "source": "SRD-5.2.1 p.90",
+      "summary": "After a hit, Constitution save against 8 + attacking ability modifier + Proficiency Bonus or fall Prone.",
+      "automated": false
+    },
+    {
+      "id": "vex",
+      "source": "SRD-5.2.1 p.90",
+      "summary": "After a damaging hit, gain Advantage on your next attack against that target before the end of your next turn.",
+      "automated": false
+    }
+  ]
+}

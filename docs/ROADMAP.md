@@ -1,14 +1,14 @@
 # Roadmap
 
-Phase 1 is the character/check/HP/persistence foundation. No Phase 2 work is authorized or implemented.
+Phase 1 delivered character/check/HP/persistence foundations. Phase 2 delivers the bounded weapon-combat foundation described in `PHASE2_REPORT.md`: sourced weapon/condition/mastery definitions, turn resources, attacks and mitigation, condition facets, durable encounters, and explainable transactional events. Existing sheets/events/rules pins survive additive migration. The user's Phase 2 brief superseded the earlier tentative roadmap; armor, rests and full recovery were not part of this implementation.
 
-Recommended Phase 2: a narrowly bounded weapon-combat slice, after approval.
+Follow-on work needs an explicit scope:
 
-1. Complete the supporting condition/action/time lifecycle: Prone/standing, Incapacitated/Unconscious, full rest completion and temporary-HP expiry, basic stabilization and recovery, explicit death-save situational modifiers. Keep revised knockout behavior distinct from HP-zero unconsciousness.
-2. Add a small sourced weapon/armor data pack, equipped item instances, and AC calculation with documented provenance.
-3. Add a combat encounter with initiative/tie decisions, turn order, action economy, attack versus AC, critical hits and typed damage with resistance/immunity/vulnerability in the SRD order. Restrict the initial supported weapons/conditions to a documented testable subset.
-4. Audit every state transition atomically; add command idempotency before an AI tool adapter can automatically retry commands. Keep existing campaigns and source pins intact through migrations.
+1. General duration/time and rest lifecycle, stabilization/recovery and revised knockout, complete condition effects on skill/sensory/social checks, concentration and automatic trigger handling.
+2. Full inventory/equipment/armor, ammunition replenishment and thrown/dropped item recovery, additional movement modes, contextual grappling and escape.
+3. Character progression and feature eligibility, mastery execution, extra resources and targeted action-economy extensions. Imported attack counts do not establish feature entitlement.
+4. Spell definitions, casting, slots and reusable spell effects, with interaction tests.
+5. Idempotency and stable tool contracts before an AI adapter retries commands. MCP remains an adapter over Application, not a second rules engine.
+6. Campaign NPC identity, relationships, quests and world state; separately sourced/licensed lore retrieval. Mechanical events supply history; the AI supplies narrative interpretation.
 
-Acceptance: one small encounter can start, resolve legal weapon turns and zero-HP recovery, resume after restart, end, and yield an explainable timeline. Exclude full spellcasting, all classes/features, grids, lore retrieval, multiplayer, and AI narration. MCP should follow stable command/error/idempotency contracts rather than arrive before them.
-
-Later independent work: character creation/progression, spell effects/resources, richer campaign NPC/quest/relationship state, licensed lore retrieval, then an MCP adapter. Each requires a separate approved scope.
+Maps, pathfinding, a GUI, multiplayer, distributed servers and automatic narrative consequences remain outside this local backend's current scope.
