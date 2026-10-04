@@ -13,6 +13,7 @@ public static class ProgressionEndpoints
             return Results.Created($"/characters/{sheet.Id}/sheet",sheet);
         });
         app.MapGet("/characters/{id:guid}/sheet", (Guid id,ProgressionService service,CancellationToken ct) => service.SheetAsync(id,ct));
+        app.MapGet("/characters/{id:guid}/spellcasting", (Guid id,ProgressionService service,CancellationToken ct) => service.SpellcastingAsync(id,ct));
         app.MapPost("/characters/{id:guid}/level-up", (Guid id,LevelUpCharacter request,ProgressionService service,CancellationToken ct) => service.LevelUpAsync(id,request,ct));
         app.MapPost("/characters/{id:guid}/inventory", (Guid id,ItemChange request,ProgressionService service,CancellationToken ct) => service.AcquireItemAsync(id,request,ct));
         app.MapPost("/characters/{id:guid}/inventory/equip", (Guid id,EquipItem request,ProgressionService service,CancellationToken ct) => service.EquipAsync(id,request,true,ct));

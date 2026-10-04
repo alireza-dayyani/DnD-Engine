@@ -72,6 +72,10 @@ Explicit caller facts cover distance, cover, visibility after senses, nearby ran
 
 The rules pack is intentionally pinned rather than silently overwritten. Content changes after a campaign uses a pack need a new version and migration policy. Phase 3 effect kinds cover passive bonuses, proficiencies, resources, senses and mastery slots; feature action execution and spells are deferred. The capability projection synchronizes new inventory weapons into combat; older Phase 2 manual capability imports and weapon grants reject choice-based characters to preserve that authority boundary.
 
+## Spellcasting foundation (Phase 4)
+
+`SpellSlotCalculator` derives spellcasting abilities and save DC/attack bonus per casting class, a shared slot maximum from combined full-caster and rounded-up half-caster levels, and a separate Pact Magic pool for Warlock levels. This is a pure derivation from the current character level allocations. No slot state, class spell list, spellbook, preparation, cast command, concentration instance or spell effect is stored or executed yet. Those need versioned spell definitions and character-owned magic state before exposing a cast operation.
+
 ## Version expansion
 
 Current commands reject versions other than 5.2.1, even if someone manually installs rows for another version. Before 5.2.2 support, add the content alongside 5.2.1 and introduce explicit version-specific resolver dispatch at the Application boundary; keep regression tests for both. Do not change the existing resolver behavior and assume the database pin alone preserves rules. Future rule-version upgrades must be explicit campaign operations with an audit event.

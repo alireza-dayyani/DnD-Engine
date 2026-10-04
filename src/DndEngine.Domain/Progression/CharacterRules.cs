@@ -60,4 +60,5 @@ public sealed record CharacterSheet(Guid Id, Guid CampaignId, string Name, long 
     ResourceState[] Resources, InventoryItem[] Inventory, string[] WeaponMasteries,
     CombatCapabilities CombatCapabilities, IReadOnlyDictionary<string,string>? SubclassIds = null,
     IReadOnlyDictionary<Ability,DerivedStatistic>? AbilityBreakdowns = null, DerivedStatistic? SpeedBreakdown = null,
-    bool UntrainedArmorPenalty = false, bool SpellcastingBlockedByArmor = false, int DarkvisionFeet = 0);
+    bool UntrainedArmorPenalty = false, bool SpellcastingBlockedByArmor = false, int DarkvisionFeet = 0,
+    SpellcastingSummary? Spellcasting = null);

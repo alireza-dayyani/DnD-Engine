@@ -1,6 +1,6 @@
-# D&D campaign engine — Phase 3
+# D&D campaign engine — Phase 4 foundation
 
-A local .NET 10 backend for SRD 5.2.1 character choices and progression, weapon combat, persistent campaign state, and an audit timeline. A future AI Dungeon Master supplies interpretation and narration; the engine owns dice and state. No AI calls, MCP, graphical UI, or spellcasting are implemented.
+A local .NET 10 backend for SRD 5.2.1 character choices and progression, weapon combat, persistent campaign state, and an audit timeline. A future AI Dungeon Master supplies interpretation and narration; the engine owns dice and state. Phase 4 has started with derived spellcasting abilities and slot summaries. Spell definitions and casting are still in progress; there are no AI calls, MCP or graphical UI.
 
 ## Run
 
@@ -31,7 +31,7 @@ Validated character sheet import; six scores; levels 1–20 and derived proficie
 
 Phase 2 adds encounter lifecycle, shared monster initiative and explicit ties, durable turns/rounds, action/bonus/reaction resources, movement/Dash/Dodge/Disengage, weapon ownership and ammunition, typed attacks/criticals/damage mitigation, source-aware conditions, combat saves, and automatic death saves at turn start. See [combat API and boundaries](docs/COMBAT_API.md).
 
-Phase 3 adds a choice-based path to create an SRD character and derive its mechanical sheet. It models 9 species, 4 backgrounds, 12 classes, eligible feats, levels 1–20, passive feature effects, a multiclass foundation, class resources, armor and inventory, hit dice and rests. See [character API](docs/CHARACTER_API.md) and [Phase 3 report](docs/PHASE3_REPORT.md). Many active class/subclass/feat/species powers are recorded as deferred feature markers; spellcasting, mastery-property execution, exact equipment packages and world-time rest scheduling remain outside this phase. The old resolved-sheet import endpoints still work for legacy characters, but Phase 3 automated progression requires a newly created SRD character.
+Phase 3 adds a choice-based path to create an SRD character and derive its mechanical sheet. It models 9 species, 4 backgrounds, 12 classes, feats, levels 1–20, passive feature effects, multiclassing foundations, class resources, armor and inventory, hit dice and rests. Phase 4 currently derives each casting class's ability, attack bonus and save DC, shared multiclass spell slots, and Warlock Pact Magic slots. It does not yet track slot expenditure or prepared spells, or resolve spell effects. See [character API](docs/CHARACTER_API.md), [Phase 3 report](docs/PHASE3_REPORT.md), and [Phase 4 report](docs/PHASE4_REPORT.md). Many active class/subclass/feat/species powers remain deferred.
 
 ## Development API
 
@@ -42,6 +42,7 @@ Phase 3 adds a choice-based path to create an SRD character and derive its mecha
 | POST / GET | `/characters`, `/characters/{id}` | Import/read mechanical sheet |
 | GET / POST | `/character-choices`, `/srd-characters` | Read choices/create choice-based SRD character |
 | GET / POST | `/characters/{id}/sheet`, `/characters/{id}/level-up` | Derived sheet and progression |
+| GET | `/characters/{id}/spellcasting` | Derived casting abilities and SRD slot maxima |
 | POST | `/characters/{id}/inventory`, `/inventory/equip`, `/inventory/unequip`, `/inventory/remove` | Acquire and equip items |
 | POST | `/characters/{id}/resources/spend`, `/rests/short`, `/rests/long` | Resource use and recovery |
 | POST | `/characters/{id}/checks/ability` | Plain ability check |
@@ -73,7 +74,7 @@ See `scripts/Smoke.ps1` for a complete character-creation request and executable
 - `src/DndEngine.Infrastructure`: SQLite/EF, migrations, pinned skills/combat/character content importers, random dice.
 - `src/DndEngine.Api`: HTTP development adapter and dependency composition.
 - `tests/`: domain, application, real SQLite, and HTTP tests. All test dice are fixed.
-- [Architecture](docs/ARCHITECTURE.md), [rules sources](docs/RULES_SOURCES.md), [domain model](docs/DOMAIN_MODEL.md), [roadmap](docs/ROADMAP.md), [Phase 1 report](docs/PHASE1_REPORT.md), [Phase 2 report](docs/PHASE2_REPORT.md), [Phase 3 report](docs/PHASE3_REPORT.md), [combat API](docs/COMBAT_API.md), [character API](docs/CHARACTER_API.md).
+- [Architecture](docs/ARCHITECTURE.md), [rules sources](docs/RULES_SOURCES.md), [domain model](docs/DOMAIN_MODEL.md), [roadmap](docs/ROADMAP.md), [Phase 1 report](docs/PHASE1_REPORT.md), [Phase 2 report](docs/PHASE2_REPORT.md), [Phase 3 report](docs/PHASE3_REPORT.md), [Phase 4 report](docs/PHASE4_REPORT.md), [combat API](docs/COMBAT_API.md), [character API](docs/CHARACTER_API.md).
 
 ## Attribution
 

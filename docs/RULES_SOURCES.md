@@ -1,5 +1,9 @@
 # Rules sources and license
 
+## Phase 4 spellcasting foundation (2026-10-05)
+
+Read the official SRD 5.2.1 PDF for multiclass spellcasting (printed pp. 23–25), class spellcasting tables (Bard p. 30; Cleric p. 35; Druid p. 40; Paladin p. 52; Ranger p. 57; Sorcerer p. 64; Warlock pp. 70–71; Wizard p. 76), general casting rules (pp. 103–106), and Concentration (Rules Glossary p. 178). The current Phase 4 code implements the shared slot progression, half-caster rounding, Pact Magic slot count/level, and class spellcasting ability/DC/attack bonus. It does not yet store available slots, spellbook/prepared choices, cantrips, Mystic Arcanum, class spell lists, spell components, cast actions, or concentration. See the Phase 4 report for boundaries.
+
 ## Phase 3 character research (2026-10-05)
 
 The character catalog and progression rules were checked against the [official SRD 5.2.1 PDF](https://media.dndbeyond.com/compendium-images/srd/5.2/SRD_CC_v5.2.1.pdf), using its printed page numbers. This is revised 2024/5.5e content, not the 2014 Basic Rules. Consult the PDF for full text; the catalog stores adapted mechanical indexes and deliberately short feature names.

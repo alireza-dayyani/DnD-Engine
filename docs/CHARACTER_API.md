@@ -25,7 +25,7 @@ Content-Type: application/json
 }
 ```
 
-`GET /characters/{id}/sheet` returns scores, modifiers, skill/save breakdowns, HP, hit dice, AC and speed provenance, senses, feature sources/deferred markers, resources, inventory, selected weapon masteries and combat capabilities. The old `GET /characters/{id}` remains the resolved Phase 1 projection.
+`GET /characters/{id}/sheet` returns scores, modifiers, skill/save breakdowns, HP, hit dice, AC and speed provenance, senses, feature sources/deferred markers, resources, inventory, selected weapon masteries, combat capabilities and (for casting classes) a derived spellcasting summary. `GET /characters/{id}/spellcasting` returns only that summary. It includes class casting abilities/attack bonuses/save DCs, maximum shared spell slots and separate Warlock Pact Magic slots. Current slot use is not persisted yet. The old `GET /characters/{id}` remains the resolved Phase 1 projection.
 
 `POST /characters/{id}/level-up` accepts `{ "classId":"fighter", "expectedRevision":0, "hpMethod":"Fixed" }`. `hpMethod` may be `Fixed` or `Roll`; a roll uses the injected die and is not retried on a write conflict. At the class level that grants an improvement, include `featId` and (if required) `abilityIncreases`; e.g. `{"classId":"fighter","expectedRevision":4,"featId":"ability-score-improvement","abilityIncreases":{"Strength":2}}`. A first class level 3 requires `subclassId`. A new class validates the multiclass prerequisites and may require `multiclassSkill` or `multiclassTool`; no second class level-1 HP maximum is granted. A newly acquired Fighting Style requires `fightingStyleFeat`. `featProficiencies` resolves a Skilled feat choice.
 

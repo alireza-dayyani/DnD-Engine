@@ -76,6 +76,9 @@ public sealed class ProgressionService(ICampaignStore campaigns, IProgressionSto
         return CharacterDeriver.Derive(character,state,rules,combat);
     }
 
+    public async Task<SpellcastingSummary?> SpellcastingAsync(Guid id, CancellationToken ct = default) =>
+        (await SheetAsync(id,ct)).Spellcasting;
+
     public async Task<CharacterSheet> LevelUpAsync(Guid id, LevelUpCharacter request, CancellationToken ct = default)
     {
         var (character,state,rules,combat) = await Load(id,ct);
