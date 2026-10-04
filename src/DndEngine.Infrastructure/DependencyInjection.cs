@@ -21,6 +21,8 @@ public static class DependencyInjection
         services.AddScoped<ICampaignStore, SqliteCampaignStore>();
         services.AddScoped<IRulesCatalog, RulesCatalog>();
         services.AddScoped<ICombatCatalog, CombatCatalog>(); services.AddScoped<ICombatStore, SqliteCombatStore>();
+        services.AddScoped<ICharacterRulesCatalog, CharacterRulesCatalog>(); services.AddScoped<IProgressionStore, SqliteProgressionStore>();
+        services.AddScoped<ProgressionService>();
         services.AddScoped<CombatService>();
         services.AddSingleton<IDiceRoller, RandomDiceRoller>(); services.AddSingleton(TimeProvider.System);
         services.AddScoped<CampaignService>(); services.AddScoped<CharacterService>(); services.AddScoped<MechanicsService>();
@@ -35,6 +37,7 @@ public static class DependencyInjection
         var campaign = scope.ServiceProvider.GetRequiredService<CampaignDbContext>();
         await rules.Database.MigrateAsync(ct); await RulesCatalog.ImportAsync(rules, ct);
         await CombatCatalog.ImportAsync(rules, ct);
+        await CharacterRulesCatalog.ImportAsync(rules, ct);
         await campaign.Database.MigrateAsync(ct);
         scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("DndEngine.Startup")
             .LogInformation("Initialized SQLite databases; supported ruleset {Ruleset}/{Version}", Ruleset.Current.Id, Ruleset.Current.Version);

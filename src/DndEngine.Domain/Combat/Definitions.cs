@@ -43,7 +43,8 @@ public sealed record CombatContent(WeaponDefinition[] Weapons, ConditionDefiniti
 
 public sealed record CombatCapabilities(int Speed, string[] WeaponProficiencies, DamageType[] Resistances,
     DamageType[] Immunities, DamageType[] Vulnerabilities, ConditionKind[] ConditionImmunities,
-    int AttacksPerAction = 1, int InitiativeBonus = 0, bool InitiativeAdvantage = false, bool InitiativeDisadvantage = false)
+    int AttacksPerAction = 1, int InitiativeBonus = 0, bool InitiativeAdvantage = false, bool InitiativeDisadvantage = false,
+    bool UntrainedArmorPenalty = false)
 {
     public void Validate()
     {

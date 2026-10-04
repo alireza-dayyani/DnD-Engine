@@ -25,6 +25,7 @@ public class CombatIntegrationTests
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseEnvironment("Testing");
+            builder.UseSetting("DataDirectory",path);
             builder.ConfigureAppConfiguration((_, c) => c.AddInMemoryCollection(new Dictionary<string, string?> { ["DataDirectory"] = path }));
             builder.ConfigureServices(s => s.AddSingleton<IDiceRoller>(new FixedDiceRoller(rolls)));
         }

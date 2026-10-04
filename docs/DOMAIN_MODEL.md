@@ -13,7 +13,7 @@
 | Proficiency | Distinct character skill IDs and saving-throw abilities; no duplicated bonus |
 | SavingThrow | Use case and result, not a persistent entity; automatic/voluntary failures explicit |
 | HitPoints | State snapshot plus behavior; current 0..max, separate temporary buffer, death/stability counters |
-| ArmorClass | Positive imported resolved integer, defaults to unarmored formula; equipment calculations deferred |
+| ArmorClass | Phase 1 accepts a resolved imported integer; Phase 3 derives it for choice-based characters from armor, shield, Dexterity and effects |
 | DiceExpression | Count, sides, modifier; supports d4/6/8/10/12/20/100; one homogeneous pool plus modifier |
 | CheckResult | Character, kind, optional skill, ability, raw dice, selected die, all modifier components, total/DC/outcome, effective advantage and auto-outcome |
 | HealthChange | Requested amount, before/after health, HP lost/regained, temporary absorption, excess damage, optional death roll |
@@ -41,15 +41,26 @@ HP-derived unconsciousness remains distinct from applied Unconscious conditions.
 
 No separate Round, Turn, Attack or Damage database entities are needed: current encounter state and structured timeline payloads carry these facts. Walking/crawling and difficult terrain spend a budget; there are no coordinates. Imported attacks per action (1–10), speed (0–1,000 feet), ammunition (0–100,000), and up to 100 encounter members are application limits.
 
+## Phase 3 additions
+
+| Concept | Representation and invariant |
+|---|---|
+| CharacterRules | Version-keyed species, background, class, subclass, feat and item definitions in `rules.db`; content hash detects drift |
+| ProgressionState | Per-character choices and current state in `campaign.db`; class levels sum to total level; legacy characters have no progression row |
+| CharacterDeriver | Recomputes skills, saves, HP projection, armor AC, speed, training, senses, resources, selected masteries and combat capabilities; source breakdowns explain derived values |
+| ResourceState | Current/max, recovery policy and feature source; resource spend is bounded and audited |
+| HitDiePool | Die sides, total and available; class-specific gains and deterministic short-rest spending |
+| InventoryItem | Stable instance ID referencing a canonical item or Phase 2 weapon; equip state never modifies canonical definitions |
+| FeatureGrant | Source and `Deferred` marker for each acquired species/background/class/subclass/feat benefit |
+
 ## Investigated, intentionally deferred
 
 | Concept | Intended boundary and modeling approach |
 |---|---|
-| CharacterClass / CharacterLevel allocations | Versioned class definitions plus character class-level allocations; total level drives proficiency. Avoid subclass/multiclass builder until needed |
-| Resource | Character-owned bounded current/max pools with recovery policy; spell slots are a specialized resource, not arbitrary flags |
+| Complete feature/subclass behavior | Phase 3 records the choice and feature marker; future focused behaviors should consume the existing definitions |
+| Spell slots | Spell slots and multiclass spellcasting need a specialized Phase 4 model, not arbitrary feature counters |
 | General effects / durations | Extend implemented condition instances with specific spell/feature triggers and world time, not arbitrary scripts |
-| Item / Armor | Extend the implemented weapon definition/ownership pattern; armor and equipped AC derivation remain deferred |
-| Full inventory | Add quantities, location, carried/held/equipped state and item recovery beyond current owned weapon availability |
+| Complete equipment economy | Add exact package branches, quantities, currency, encumbrance and held/dropped state beyond current owned/equipped items |
 | Spell / SpellSlot | Versioned spell definition and reusable effects; slots tracked on the character; no universal scripting language |
 | NPC | Canonical definition/reference separated from mutable campaign NPC state; no proprietary lore ingestion |
 | Relationship | Directed campaign participant IDs, state and source events; narrative interpretation remains external |

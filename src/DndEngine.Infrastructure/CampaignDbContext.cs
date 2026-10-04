@@ -41,12 +41,15 @@ public sealed class CampaignDbContext(DbContextOptions<CampaignDbContext> option
     public DbSet<CharacterRow> Characters => Set<CharacterRow>();
     public DbSet<EventRow> Events => Set<EventRow>();
     public DbSet<CombatProfileRow> CombatProfiles => Set<CombatProfileRow>();
+    public DbSet<ProgressionRow> Progressions => Set<ProgressionRow>();
     public DbSet<EncounterRow> Encounters => Set<EncounterRow>();
     public DbSet<CombatMembershipRow> CombatMemberships => Set<CombatMembershipRow>();
     protected override void OnModelCreating(ModelBuilder model)
     {
         model.Entity<CampaignRow>().HasKey(x => x.Id);
         model.Entity<CombatProfileRow>().HasKey(x => x.CharacterId);
+        model.Entity<ProgressionRow>().HasKey(x => x.CharacterId);
+        model.Entity<ProgressionRow>().HasOne<CharacterRow>().WithMany().HasForeignKey(x => x.CharacterId).OnDelete(DeleteBehavior.Restrict);
         model.Entity<CombatProfileRow>().HasOne<CharacterRow>().WithMany().HasForeignKey(x => x.CharacterId).OnDelete(DeleteBehavior.Restrict);
         model.Entity<EncounterRow>().HasKey(x => x.Id);
         model.Entity<EncounterRow>().Property(x => x.Revision).IsConcurrencyToken();

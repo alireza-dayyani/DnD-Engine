@@ -197,6 +197,14 @@ namespace DndEngine.Infrastructure.Migrations.Campaign
                     b.ToTable("Events");
                 });
 
+            modelBuilder.Entity("DndEngine.Infrastructure.ProgressionRow", b =>
+                {
+                    b.Property<Guid>("CharacterId").HasColumnType("TEXT");
+                    b.Property<string>("StateJson").IsRequired().HasColumnType("TEXT");
+                    b.HasKey("CharacterId");
+                    b.ToTable("Progressions");
+                });
+
             modelBuilder.Entity("DndEngine.Infrastructure.CharacterRow", b =>
                 {
                     b.HasOne("DndEngine.Infrastructure.CampaignRow", null)
@@ -251,6 +259,12 @@ namespace DndEngine.Infrastructure.Migrations.Campaign
                         .WithMany()
                         .HasForeignKey("CharacterId")
                         .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("DndEngine.Infrastructure.ProgressionRow", b =>
+                {
+                    b.HasOne("DndEngine.Infrastructure.CharacterRow", null).WithMany()
+                        .HasForeignKey("CharacterId").OnDelete(DeleteBehavior.Restrict).IsRequired();
                 });
 #pragma warning restore 612, 618
         }

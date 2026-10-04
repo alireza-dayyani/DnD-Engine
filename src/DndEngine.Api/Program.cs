@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using DndEngine.Application;
 using DndEngine.Domain;
 using DndEngine.Infrastructure;
+using DndEngine.Api;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.ConfigureHttpJsonOptions(o => {
@@ -9,7 +10,7 @@ builder.Services.ConfigureHttpJsonOptions(o => {
     o.SerializerOptions.RespectRequiredConstructorParameters = true;
 });
 builder.Services.AddProblemDetails();
-builder.Services.AddDndEngine(builder.Configuration["DataDirectory"] ?? Path.Combine(builder.Environment.ContentRootPath, "../../data"));
+builder.Services.AddDndEngine(builder.Configuration["DataDirectory"] ?? DefaultDataDirectory());
 var app = builder.Build();
 app.Use(async (context, next) =>
 {
@@ -38,6 +39,15 @@ app.MapPost("/characters/{id:guid}/heal", (Guid id, HealingRequest request, Mech
 app.MapPost("/characters/{id:guid}/temporary-hp", (Guid id, TemporaryHpRequest request, MechanicsService service, CancellationToken ct) => service.TemporaryHpAsync(id, request, ct));
 app.MapPost("/characters/{id:guid}/death-saving-throws", (Guid id, MechanicsService service, CancellationToken ct) => service.DeathSaveAsync(id, ct));
 app.MapCombat();
+app.MapProgression();
 await app.Services.InitializeDndEngineAsync();
 await app.RunAsync();
+static string DefaultDataDirectory()
+{
+    for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
+        if (File.Exists(Path.Combine(directory.FullName, "global.json")) &&
+            Directory.Exists(Path.Combine(directory.FullName, "src", "DndEngine.Api")))
+            return Path.Combine(directory.FullName, "data");
+    return Path.Combine(Directory.GetCurrentDirectory(), "data");
+}
 public partial class Program;

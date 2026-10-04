@@ -12,11 +12,13 @@ public class ApiTests
 {
     private sealed class Factory : WebApplicationFactory<Program>
     {
+        private readonly string path = Path.Combine(Path.GetTempPath(),"DndEngine.ApiTests",Guid.NewGuid().ToString("N"));
         protected override void ConfigureWebHost(IWebHostBuilder builder)
         {
             builder.UseEnvironment("Testing");
+            builder.UseSetting("DataDirectory",path);
             builder.ConfigureAppConfiguration((_,config)=>config.AddInMemoryCollection(new Dictionary<string,string?>
-                { ["DataDirectory"]=Path.Combine(Path.GetTempPath(),"DndEngine.ApiTests",Guid.NewGuid().ToString("N")) }));
+                { ["DataDirectory"]=path }));
             builder.ConfigureServices(services=>services.AddSingleton<IDiceRoller>(new FixedDiceRoller(11,7,16,10)));
         }
     }

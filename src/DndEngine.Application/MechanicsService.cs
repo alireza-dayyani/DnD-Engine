@@ -1,9 +1,11 @@
 using System.Text.Json;
 using DndEngine.Domain;
+using DndEngine.Domain.Progression;
 
 namespace DndEngine.Application;
 
-public sealed class MechanicsService(ICampaignStore store, IRulesCatalog catalog, IDiceRoller dice, TimeProvider clock)
+public sealed class MechanicsService(ICampaignStore store, IRulesCatalog catalog, IDiceRoller dice, TimeProvider clock,
+    IProgressionStore? progressions = null, ICharacterRulesCatalog? characterRules = null)
 {
     public Task<CheckResult> AbilityCheckAsync(Guid id, CheckRequest request, CancellationToken ct = default) =>
         CheckAsync(id, CheckKind.Ability, request.Ability, request.Options, null, ct);
@@ -17,9 +19,34 @@ public sealed class MechanicsService(ICampaignStore store, IRulesCatalog catalog
     {
         var (character, campaign) = await LoadAsync(id, ct);
         var skill = kind == CheckKind.Skill ? await catalog.GetSkillAsync(campaign.Ruleset, skillId!, ct) : null;
+        if (progressions is not null && characterRules is not null)
+        {
+            var progression = await progressions.GetAsync(id,ct);
+            if (progression is not null)
+            {
+                var rules = await characterRules.GetAsync(campaign.Ruleset,ct);
+                var equipped = progression.Inventory.Where(x => x.Equipped)
+                    .Select(x => rules.Items.SingleOrDefault(i => i.Id == x.DefinitionId))
+                    .Where(x => x is not null).ToArray();
+                if (kind == CheckKind.Skill && skillId == "stealth" && (ability ?? skill!.Ability) == Ability.Dexterity &&
+                    equipped.Any(x => x!.Kind == ItemKind.Armor && x.StealthDisadvantage))
+                    options = options with { Disadvantage = true };
+                if ((ability ?? skill?.Ability) is Ability.Strength or Ability.Dexterity &&
+                    equipped.Any(x => x!.Kind == ItemKind.Armor &&
+                        !HasArmorTraining(progression,rules,x!)))
+                    options = options with { Disadvantage = true };
+            }
+        }
         var result = new CheckResolver(dice).Resolve(character, kind, ability ?? skill!.Ability, options, skill);
         await SaveAsync(character, campaign, kind == CheckKind.SavingThrow ? "SavingThrowMade" : "AbilityCheckMade", result, ct);
         return result;
+    }
+    private static bool HasArmorTraining(ProgressionState state, CharacterRules rules, ItemDefinition item)
+    {
+        var first = rules.Classes.Single(x => x.Id == state.Classes[0].ClassId);
+        var kind = item.ArmorKind!.Value.ToString().ToLowerInvariant();
+        if (first.ArmorTraining.Contains(kind)) return true;
+        return state.Classes.Skip(1).Any(x => rules.Classes.Single(c => c.Id == x.ClassId).MulticlassArmorTraining.Contains(kind));
     }
     public Task<HealthResult> DamageAsync(Guid id, DamageRequest request, CancellationToken ct = default) =>
         ChangeHealthAsync(id, "CharacterDamaged", hp => hp.Damage(request.Amount, request.Critical), ct);

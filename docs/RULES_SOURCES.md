@@ -1,5 +1,21 @@
 # Rules sources and license
 
+## Phase 3 character research (2026-10-05)
+
+The character catalog and progression rules were checked against the [official SRD 5.2.1 PDF](https://media.dndbeyond.com/compendium-images/srd/5.2/SRD_CC_v5.2.1.pdf), using its printed page numbers. This is revised 2024/5.5e content, not the 2014 Basic Rules. Consult the PDF for full text; the catalog stores adapted mechanical indexes and deliberately short feature names.
+
+| SRD section | Implemented mechanical part | Deferred part |
+|---|---|---|
+| Character creation/multiclassing, pp. 20–25 | Six ability scores; level/class-level split; total-level proficiency; 13 primary-ability prerequisites including Fighter's Strength **or** Dexterity; first-class vs additional-class training; level-1 and later HP/hit dice | Full multiclass spell-slot calculation, class spellcasting, optional class swaps |
+| Class tables, pp. 27–77 | 12 class definitions, hit dice, initial training, one SRD subclass choice per class, level 1–20 feature markers, in-scope feature resources and effects | Most individual class/subclass actions, expertise selection, spellcasting, class-specific invocation/metamagic/wild-shape choices |
+| Backgrounds, pp. 80–81 | 4 SRD backgrounds, +2/+1 or +1/+1/+1 among three listed abilities, skills, tools, Origin feats, starter item eligibility | Exact package quantities, gold alternatives and complete equipment-choice branches |
+| Species, pp. 82–85 | 9 species, sizes, speed, lineage choices, darkvision distance, resistance and selected HP/speed/skill effects | Active powers, senses in visibility adjudication, spell traits, trait rerolls and situational advantages |
+| Feats, pp. 86–88 | SRD Origin, General, Fighting Style and seven Epic Boon entries; category, level/ability prerequisites, repeatability, some effects and choice validation | Feat-triggered actions and spells; effects labeled `Deferred` are informational even if one simple bonus is already applied |
+| Equipment/armor/tools, pp. 89–96 | Existing 38 weapon definitions; 13 nonmagical armor/shield types; category AC, Dexterity caps, Strength speed penalties, Stealth disadvantage, untrained-armor D20 disadvantage and spellcasting block marker; 37 tool IDs | Encumbrance, cost, exact pack contents, full ammunition/held-item synchronization, mastery-property execution |
+| Rests/Hit Dice, pp. 184, 186 | Short-Rest Hit Die spending with CON modifier; Long-Rest full HP/dice recovery, temp-HP expiry, one Exhaustion reduction, implemented resource recovery | World-time scheduling, interruptions, Long-Rest spell recovery, optional rest activities |
+
+The engine records a completed Long Rest timestamp and enforces a conservative 24-hour completion-to-completion interval (eight hours resting plus sixteen hours before another start); it does not simulate starts or interruptions. Short Rest duration is likewise a caller assertion. `Deferred` on a feature means at least one important behavior still needs implementation; it does not necessarily mean no effect is represented. Armor training penalties apply to Phase 1 Strength/Dexterity checks and saves and Phase 2 weapon attacks. The sheet exposes `SpellcastingBlockedByArmor` for Phase 4; no spell engine exists yet.
+
 ## Phase 2 research (2026-09-29)
 
 Read the same official 5.2.1 PDF for: combat/initiative/ties/surprise/rounds/turns (p.13); actions, bonus actions and reactions (pp.9–10); movement, difficult terrain, unseen targets (p.14); cover/range/close ranged attacks/opportunity attacks (p.15); weapon damage, fixed damage and critical dice (p.16); mitigation order and zero-HP policies (pp.17–18); weapon properties and all eight mastery properties (pp.89–90), all 38 weapons (p.91); all 13 damage types (p.180); all 15 conditions in the glossary (pp.177–191).
@@ -37,7 +53,7 @@ Page numbers below are the PDF's printed pages.
 | pp. 17–18, zero HP | Massive remaining damage at least max HP kills; otherwise unconscious; damage at zero adds failures, two on critical | PC health state and regression tests |
 | pp. 17–18, death saves | 10+ succeeds, natural 1 adds two failures, natural 20 heals one; three successes stabilize, three failures kill; counters reset on stabilization/healing | Standalone basic death-save use case; Phase 2 schedules saves at turn start |
 | p. 18, temporary HP | Buffer first, never stacks, recipient chooses replacement, healing does not restore it or consciousness | Explicit replacement boolean; tests |
-| p. 18, temporary HP duration | Expires when depleted or on completing a Long Rest | Depletion supported; full rest/time progression deferred, no claim of automatic rest expiry |
+| p. 18, temporary HP duration | Expires when depleted or on completing a Long Rest | Phase 1 supported depletion; Phase 3 Long Rest now expires the buffer on completion |
 | p. 191, Unconscious | Strength/Dexterity saves automatically fail; unconsciousness confers Prone, which remains after waking | Save auto-outcome and persistent Prone flag; Phase 2 adds independent condition instances |
 
 ## Phase 1 endpoint boundaries and interpretation notes

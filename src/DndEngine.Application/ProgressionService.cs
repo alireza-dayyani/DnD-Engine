@@ -1,0 +1,391 @@
+using DndEngine.Domain;
+using DndEngine.Domain.Combat;
+using DndEngine.Domain.Progression;
+
+namespace DndEngine.Application;
+
+public sealed class ProgressionService(ICampaignStore campaigns, IProgressionStore progressions,
+    ICharacterRulesCatalog characterCatalog, ICombatCatalog combatCatalog, ICombatStore combatStore,
+    IDiceRoller dice, TimeProvider clock)
+{
+    public async Task<CharacterRules> ChoicesAsync(CancellationToken ct = default) =>
+        await characterCatalog.GetAsync(Ruleset.Current,ct);
+
+    public async Task<CharacterSheet> CreateAsync(CreateSrdCharacter request, CancellationToken ct = default)
+    {
+        var campaign = await campaigns.GetCampaignAsync(request.CampaignId,ct) ?? throw new NotFoundException("Campaign not found.");
+        campaign.Ruleset.RequireSupported();
+        var rules = await characterCatalog.GetAsync(campaign.Ruleset,ct);
+        var combat = await combatCatalog.GetAsync(campaign.Ruleset,ct);
+        var species = rules.Species.SingleOrDefault(x => x.Id == request.SpeciesId) ?? throw new RuleViolation("Unknown species.");
+        var background = rules.Backgrounds.SingleOrDefault(x => x.Id == request.BackgroundId) ?? throw new RuleViolation("Unknown background.");
+        var @class = rules.Classes.SingleOrDefault(x => x.Id == request.ClassId) ?? throw new RuleViolation("Unknown class.");
+        if (request.BaseAbilities is null || request.BackgroundBonuses is null || request.ClassSkills is null)
+            throw new RuleViolation("Abilities, background bonuses, and class skills are required.");
+        if (request.BaseAbilities.Count != 6 || Enum.GetValues<Ability>().Any(a => !request.BaseAbilities.ContainsKey(a)))
+            throw new RuleViolation("Exactly six base ability scores are required.");
+        if (Enum.GetValues<Ability>().Any(a => request.BaseAbilities[a] is < 1 or > 20 ||
+            request.BaseAbilities[a] + request.BackgroundBonuses.GetValueOrDefault(a) > 20))
+            throw new RuleViolation("Creation ability scores must be between 1 and 20 after background bonuses.");
+        if (species.Id == "human" && request.HumanOriginFeat is null || species.Id != "human" && request.HumanOriginFeat is not null)
+            throw new RuleViolation("Human characters must choose one extra Origin feat.");
+        var feats = new List<string> { background.OriginFeat };
+        if (request.HumanOriginFeat is not null)
+        {
+            var extra = rules.Feats.SingleOrDefault(x => x.Id == request.HumanOriginFeat && x.Kind == FeatKind.Origin)
+                ?? throw new RuleViolation("Human extra feat must be an SRD Origin feat.");
+            if (extra.Id == background.OriginFeat && !extra.Repeatable) throw new RuleViolation("Origin feat cannot be selected twice.");
+            feats.Add(extra.Id);
+        }
+        if (@class.Features.Any(x => x.Id == "fighting-style" && x.Level == 1))
+        {
+            var style = rules.Feats.SingleOrDefault(x => x.Id == request.FightingStyleFeat && x.Kind == FeatKind.FightingStyle)
+                ?? throw new RuleViolation("Starting class requires a Fighting Style feat choice.");
+            feats.Add(style.Id);
+        }
+        else if (request.FightingStyleFeat is not null) throw new RuleViolation("This class does not grant a starting Fighting Style.");
+        var items = (request.StartingItemIds ?? []).Select(id =>
+        {
+            CharacterDeriver.FindItem(id,rules,combat);
+            if (!@class.StartingEquipment.Contains(id) && !background.Equipment.Contains(id))
+                throw new RuleViolation($"{id} is not in the selected starting equipment packages.");
+            return new InventoryItem(Guid.NewGuid(),id);
+        }).ToArray();
+        var state = new ProgressionState(species.Id,request.SpeciesVariantId,request.Size,background.Id,
+            new(request.BaseAbilities),new(request.BackgroundBonuses),new(),[new(@class.Id,1)],request.ClassSkills,
+            feats.ToArray(),1,[new(@class.HitDie,1,1)],[],items,request.MasteredWeaponIds ?? [],request.SpeciesSkill);
+        var expectedFeatChoices = feats.Sum(id => rules.Feats.Single(f => f.Id == id).ProficiencyChoiceCount);
+        var featProficiencies = FeatProficiencies(request.FeatProficiencies,expectedFeatChoices,"feat:skilled",rules,
+            [..background.Skills.Select(x => new Proficiency(ProficiencyKind.Skill,x,"background")),
+             ..request.ClassSkills.Select(x => new Proficiency(ProficiencyKind.Skill,x,"class"))]);
+        var constitution = new AbilityScore(request.BaseAbilities[Ability.Constitution] + request.BackgroundBonuses.GetValueOrDefault(Ability.Constitution)).Modifier;
+        var speciesHp = species.Features.SelectMany(x => x.Effects).Where(x => x.Kind == EffectKind.HitPointsPerLevel).Sum(x => x.Amount);
+        var maxHp = Math.Max(1,@class.HitDie + constitution + speciesHp);
+        state = state with { MaximumHp = maxHp, Resources = ResourcesFor(state,rules,[]),
+            BackgroundToolId=request.BackgroundToolId, ClassTools=request.ClassTools ?? [],ExtraProficiencies=featProficiencies };
+        var character = Materialize(Guid.NewGuid(),campaign.Id,request.Name,state,rules,combat,new HitPoints(maxHp),0);
+        var sheet = CharacterDeriver.Derive(character,state,rules,combat);
+        var profile = Profile(character.Id,sheet,combat,null);
+        await progressions.CreateAsync(character,state,profile,Event(character,"CharacterCreated",0,new { sheet }),ct);
+        return sheet;
+    }
+
+    public async Task<CharacterSheet> SheetAsync(Guid id, CancellationToken ct = default)
+    {
+        var (character,state,rules,combat) = await Load(id,ct);
+        return CharacterDeriver.Derive(character,state,rules,combat);
+    }
+
+    public async Task<CharacterSheet> LevelUpAsync(Guid id, LevelUpCharacter request, CancellationToken ct = default)
+    {
+        var (character,state,rules,combat) = await Load(id,ct);
+        await RequireMutable(character,request.ExpectedRevision,ct);
+        if (character.Level.Value >= 20) throw new RuleViolation("Character level cannot exceed 20.");
+        var next = rules.Classes.SingleOrDefault(x => x.Id == request.ClassId) ?? throw new RuleViolation("Unknown class.");
+        var currentClass = state.Classes.SingleOrDefault(x => x.ClassId == next.Id);
+        var newClass = currentClass is null;
+        var oldSheet = CharacterDeriver.Derive(character,state,rules,combat);
+        if (newClass && state.Classes.Select(x => rules.Classes.Single(c => c.Id == x.ClassId)).Append(next)
+            .Any(c => c.AnyPrimaryAbility ? c.PrimaryAbilities.All(a => oldSheet.Abilities[a] < 13) :
+                c.PrimaryAbilities.Any(a => oldSheet.Abilities[a] < 13)))
+            throw new RuleViolation("Multiclassing requires 13 in every primary ability of each class.");
+        var classLevel = (currentClass?.Level ?? 0) + 1;
+        var classes = newClass ? [..state.Classes,new ClassLevel(next.Id,1)] :
+            state.Classes.Select(x => x.ClassId == next.Id ? x with { Level = classLevel } : x).ToArray();
+        var subclassIds = new Dictionary<string,string>(state.SubclassIds ?? []);
+        if (classLevel == 3)
+        {
+            var subclass = (next.Subclasses ?? []).SingleOrDefault(x => x.Id == request.SubclassId)
+                ?? throw new RuleViolation("This class level requires a valid SRD subclass choice.");
+            subclassIds[next.Id] = subclass.Id;
+        }
+        else if (request.SubclassId is not null) throw new RuleViolation("This level does not grant a subclass choice.");
+        var extraProficiencies = (state.ExtraProficiencies ?? []).ToList();
+        if (newClass && next.MulticlassSkillCount > 0)
+        {
+            var skill = request.MulticlassSkill ?? throw new RuleViolation("This multiclass requires a skill choice.");
+            if (!next.SkillChoices.Contains("*") && !next.SkillChoices.Contains(skill) ||
+                oldSheet.Proficiencies.Any(x => x.Kind == ProficiencyKind.Skill && x.Id == skill))
+                throw new RuleViolation("Invalid or duplicate multiclass skill choice.");
+            extraProficiencies.Add(new(ProficiencyKind.Skill,skill,$"class:{next.Id}"));
+        }
+        else if (request.MulticlassSkill is not null) throw new RuleViolation("This level does not grant a multiclass skill choice.");
+        if (newClass) foreach (var tool in next.MulticlassTools ?? [])
+            extraProficiencies.Add(new(ProficiencyKind.Tool,tool,$"class:{next.Id}"));
+        if (newClass && next.MulticlassToolChoiceCount > 0)
+        {
+            var tool = request.MulticlassTool ?? throw new RuleViolation("This multiclass requires a tool choice.");
+            if (!(next.ToolChoiceOptions ?? []).Contains(tool) ||
+                oldSheet.Proficiencies.Any(x => x.Kind == ProficiencyKind.Tool && x.Id == tool))
+                throw new RuleViolation("Invalid or duplicate multiclass tool choice.");
+            extraProficiencies.Add(new(ProficiencyKind.Tool,tool,$"class:{next.Id}"));
+        }
+        else if (request.MulticlassTool is not null) throw new RuleViolation("This level does not grant a multiclass tool choice.");
+        var featLevel = next.Features.Any(f => f.Id is "ability-score-improvement" or "epic-boon" && f.Level == classLevel);
+        var epicBoon = next.Features.Any(f => f.Id == "epic-boon" && f.Level == classLevel);
+        var bonuses = new Dictionary<Ability,int>(state.AdvancementBonuses);
+        var feats = state.FeatIds.ToList();
+        if (next.Features.Any(x => x.Id == "fighting-style" && x.Level == classLevel))
+        {
+            var style = rules.Feats.SingleOrDefault(x => x.Id == request.FightingStyleFeat && x.Kind == FeatKind.FightingStyle)
+                ?? throw new RuleViolation("This level requires a Fighting Style feat choice.");
+            if (feats.Contains(style.Id)) throw new RuleViolation("Fighting Style feat is not repeatable.");
+            feats.Add(style.Id);
+        }
+        else if (request.FightingStyleFeat is not null) throw new RuleViolation("This level does not grant a Fighting Style.");
+        if (featLevel)
+        {
+            if (request.FeatId is null) throw new RuleViolation("This level requires an Ability Score Improvement or eligible feat choice.");
+            if (request.FeatId == "ability-score-improvement" && !epicBoon)
+            {
+                var increases = request.AbilityIncreases ?? throw new RuleViolation("Ability Score Improvement requires ability increases.");
+                if (increases.Values.Order().SequenceEqual([2]) == false && increases.Values.Order().SequenceEqual([1,1]) == false)
+                    throw new RuleViolation("Ability Score Improvement must be +2 or +1/+1.");
+                foreach (var (ability,amount) in increases)
+                {
+                    if (oldSheet.Abilities[ability] + amount > 20) throw new RuleViolation("Ability Score Improvement cannot exceed 20.");
+                    bonuses[ability] = bonuses.GetValueOrDefault(ability) + amount;
+                }
+                feats.Add("ability-score-improvement");
+            }
+            else
+            {
+                var feat = rules.Feats.SingleOrDefault(x => x.Id == request.FeatId &&
+                    (epicBoon ? x.Kind == FeatKind.EpicBoon : x.Kind is FeatKind.General or FeatKind.Origin) &&
+                    x.MinimumLevel <= character.Level.Value + 1)
+                    ?? throw new RuleViolation("Feat is not eligible at this level.");
+                if (!feat.Repeatable && feats.Contains(feat.Id)) throw new RuleViolation("Feat is not repeatable.");
+                if (feat.AbilityPrerequisite is { } ability && oldSheet.Abilities[ability] < feat.MinimumAbility ||
+                    feat.AnyAbilityPrerequisites is { Length: > 0 } options && options.All(a => oldSheet.Abilities[a] < feat.MinimumAbility))
+                    throw new RuleViolation("Feat ability prerequisite is not met.");
+                if (feat.AbilityBoostAmount > 0)
+                {
+                    var increase = request.AbilityIncreases ?? throw new RuleViolation("Feat requires an ability increase choice.");
+                    if (increase.Count != 1 || increase.Values.Single() != feat.AbilityBoostAmount)
+                        throw new RuleViolation("Invalid feat ability increase.");
+                    var chosen = increase.Keys.Single();
+                    if (!(feat.AbilityBoostOptions ?? []).Contains(chosen))
+                        throw new RuleViolation("Ability is not eligible for this Epic Boon.");
+                    if (oldSheet.Abilities[chosen]+feat.AbilityBoostAmount > feat.AbilityBoostCap)
+                        throw new RuleViolation("Feat ability increase exceeds its cap.");
+                    bonuses[chosen] = bonuses.GetValueOrDefault(chosen)+feat.AbilityBoostAmount;
+                }
+                else if (request.AbilityIncreases is not null) throw new RuleViolation("This feat grants no ability increase.");
+                feats.Add(feat.Id);
+            }
+        }
+        else if (request.FeatId is not null || request.AbilityIncreases is not null) throw new RuleViolation("This level does not grant a feat choice.");
+        var selectedFeat = request.FeatId is null ? null : rules.Feats.Single(f => f.Id == request.FeatId);
+        var extraChoices = FeatProficiencies(request.FeatProficiencies,selectedFeat?.ProficiencyChoiceCount ?? 0,
+            request.FeatId is null ? "feat" : $"feat:{request.FeatId}",rules,oldSheet.Proficiencies);
+        extraProficiencies.AddRange(extraChoices);
+        int dieResult;
+        if (request.HpMethod.Equals("Fixed",StringComparison.OrdinalIgnoreCase)) dieResult = next.HitDie / 2 + 1;
+        else if (request.HpMethod.Equals("Roll",StringComparison.OrdinalIgnoreCase)) dieResult = dice.Roll(new(1,next.HitDie)).Total;
+        else throw new RuleViolation("HP method must be Fixed or Roll.");
+        var updated = state with { Classes = classes, FeatIds = feats.ToArray(), AdvancementBonuses = bonuses,
+            ExtraProficiencies = extraProficiencies.ToArray(), SubclassIds = subclassIds };
+        var newCon = new AbilityScore(updated.BaseAbilities[Ability.Constitution] + updated.BackgroundBonuses.GetValueOrDefault(Ability.Constitution) + bonuses.GetValueOrDefault(Ability.Constitution)).Modifier;
+        var oldCon = oldSheet.AbilityModifiers[Ability.Constitution];
+        var species = rules.Species.Single(x => x.Id == state.SpeciesId);
+        var extraPerLevel = species.Features.SelectMany(x => x.Effects).Where(x => x.Kind == EffectKind.HitPointsPerLevel).Sum(x => x.Amount);
+        var hpGain = Math.Max(1,dieResult+newCon+extraPerLevel) + character.Level.Value*(newCon-oldCon);
+        var pools = state.HitDice.Select(x => x.Sides == next.HitDie ? x with { Total = x.Total+1, Available = x.Available+1 } : x).ToList();
+        if (pools.All(x => x.Sides != next.HitDie)) pools.Add(new(next.HitDie,1,1));
+        updated = updated with { HitDice = pools.ToArray(), MaximumHp = state.MaximumHp+hpGain };
+        updated = updated with { Resources = ResourcesFor(updated,rules,state.Resources) };
+        var oldHealth = character.Health.State;
+        var health = new HitPoints(oldHealth with { Maximum = updated.MaximumHp,
+            Current = Math.Clamp(oldHealth.Current+hpGain,0,updated.MaximumHp) });
+        var nextCharacter = Materialize(character.Id,character.CampaignId,character.Name,updated,rules,combat,health,character.Revision);
+        var sheet = CharacterDeriver.Derive(nextCharacter,updated,rules,combat);
+        var profile = Profile(id,sheet,combat,await combatStore.GetProfileAsync(id,ct));
+        await progressions.SaveAsync(nextCharacter,updated,profile,Event(character,"LevelGained",character.Revision+1,new { classId=next.Id,classLevel,totalLevel=sheet.Level,hpGain,feat=request.FeatId }),ct);
+        return sheet with { Revision = character.Revision+1 };
+    }
+
+    public async Task<CharacterSheet> AcquireItemAsync(Guid id, ItemChange request, CancellationToken ct = default)
+    {
+        var (character,state,rules,combat) = await Load(id,ct);
+        await RequireMutable(character,request.ExpectedRevision,ct);
+        CharacterDeriver.FindItem(request.DefinitionId,rules,combat);
+        var item = new InventoryItem(Guid.NewGuid(),request.DefinitionId);
+        return await Save(character,state with { Inventory=[..state.Inventory,item] },rules,combat,"ItemAcquired",new { item },ct);
+    }
+    public async Task<CharacterSheet> EquipAsync(Guid id, EquipItem request, bool equipped, CancellationToken ct = default)
+    {
+        var (character,state,rules,combat) = await Load(id,ct);
+        await RequireMutable(character,request.ExpectedRevision,ct);
+        var item = state.Inventory.SingleOrDefault(x => x.Id == request.ItemId) ?? throw new RuleViolation("Item is not owned.");
+        var definition = CharacterDeriver.FindItem(item.DefinitionId,rules,combat);
+        if (definition.Kind == ItemKind.Gear) throw new RuleViolation("This gear has no equipment slot.");
+        var inventory = state.Inventory.Select(x => x.Id == item.Id ? x with { Equipped=equipped } :
+            equipped && definition.Kind is ItemKind.Armor or ItemKind.Shield &&
+            CharacterDeriver.FindItem(x.DefinitionId,rules,combat).Kind == definition.Kind ? x with { Equipped=false } : x).ToArray();
+        return await Save(character,state with { Inventory=inventory },rules,combat,equipped ? "ItemEquipped" : "ItemUnequipped",new { itemId=item.Id },ct);
+    }
+    public async Task<CharacterSheet> RemoveItemAsync(Guid id, EquipItem request, CancellationToken ct = default)
+    {
+        var (character,state,rules,combat) = await Load(id,ct);
+        await RequireMutable(character,request.ExpectedRevision,ct);
+        if (!state.Inventory.Any(x => x.Id == request.ItemId)) throw new RuleViolation("Item is not owned.");
+        return await Save(character,state with { Inventory=state.Inventory.Where(x => x.Id != request.ItemId).ToArray() },rules,combat,"ItemRemoved",new { itemId=request.ItemId },ct);
+    }
+
+    public async Task<CharacterSheet> SpendResourceAsync(Guid id, SpendResource request, CancellationToken ct = default)
+    {
+        var (character,state,rules,combat) = await Load(id,ct);
+        await RequireMutable(character,request.ExpectedRevision,ct);
+        Guard.Range(request.Amount,1,1000000,"Resource amount");
+        var resource = state.Resources.SingleOrDefault(x => x.Id == request.ResourceId) ?? throw new RuleViolation("Resource not available.");
+        if (resource.Current < request.Amount) throw new RuleViolation("Insufficient resource uses.");
+        var resources = state.Resources.Select(x => x.Id == resource.Id ? x with { Current=x.Current-request.Amount } : x).ToArray();
+        return await Save(character,state with { Resources=resources },rules,combat,"ResourceChanged",
+            new { resourceId=resource.Id, before=resource.Current, after=resource.Current-request.Amount },ct);
+    }
+
+    public async Task<RestResult> ShortRestAsync(Guid id, ShortRestRequest request, CancellationToken ct = default)
+    {
+        var (character,state,rules,combat) = await Load(id,ct);
+        await RequireMutable(character,request.ExpectedRevision,ct);
+        character.Health.RequireAlive();
+        if (character.Health.State.Current < 1) throw new RuleViolation("Short Rest requires at least 1 HP.");
+        var pools = state.HitDice.ToArray();
+        var rolls = new List<int>();
+        var before = character.Health.State.Current;
+        foreach (var sides in request.HitDieSides ?? [])
+        {
+            var index = Array.FindIndex(pools,x => x.Sides == sides && x.Available > 0);
+            if (index < 0) throw new RuleViolation("Requested Hit Die is unavailable.");
+            var rolled = dice.Roll(new(1,sides)).Total;
+            rolls.Add(rolled);
+            pools[index] = pools[index] with { Available=pools[index].Available-1 };
+            character.Health.Heal(Math.Max(1,rolled+character.AbilityModifier(Ability.Constitution)));
+        }
+        var resources = state.Resources.Select(x => x with { Current=x.Recovery switch {
+            RecoveryKind.ShortRest => x.Maximum, RecoveryKind.OneOnShortRest => Math.Min(x.Maximum,x.Current+1), _ => x.Current } }).ToArray();
+        var updated = state with { HitDice=pools, Resources=resources };
+        var sheet = await Save(character,updated,rules,combat,"RestCompleted",new { kind="Short",rolls,hpRegained=character.Health.State.Current-before },ct);
+        return new(sheet,rolls.ToArray(),character.Health.State.Current-before,resources.Where((x,i) => x.Current != state.Resources[i].Current).ToArray(),[]);
+    }
+    public async Task<RestResult> LongRestAsync(Guid id, LongRestRequest request, CancellationToken ct = default)
+    {
+        var (character,state,rules,combat) = await Load(id,ct);
+        await RequireMutable(character,request.ExpectedRevision,ct);
+        character.Health.RequireAlive();
+        if (character.Health.State.Current < 1) throw new RuleViolation("Long Rest requires at least 1 HP.");
+        var now = clock.GetUtcNow();
+        if (state.LastLongRestAtUtc is { } last && now-last < TimeSpan.FromHours(24))
+            throw new RuleViolation("A new Long Rest cannot finish before the required 16-hour interval and 8-hour rest.");
+        var before = character.Health.State.Current;
+        var health = new HitPoints(character.Health.State with { Current=character.Health.State.Maximum, Temporary=0,Stable=false,
+            DeathSuccesses=0,DeathFailures=0 });
+        var updated = state with { HitDice=state.HitDice.Select(x => x with { Available=x.Total }).ToArray(),
+            Resources=state.Resources.Select(x => x with { Current=x.Maximum }).ToArray(), LastLongRestAtUtc=now,
+            MasteredWeaponIds=request.MasteredWeaponIds ?? state.MasteredWeaponIds };
+        var nextCharacter = Materialize(character.Id,character.CampaignId,character.Name,updated,rules,combat,health,character.Revision);
+        var sheet = CharacterDeriver.Derive(nextCharacter,updated,rules,combat);
+        var oldProfile = await combatStore.GetProfileAsync(id,ct);
+        var profile = Profile(id,sheet,combat,oldProfile);
+        var exhaustion = profile.State.Conditions.FirstOrDefault(x => x.Kind == ConditionKind.Exhaustion);
+        if (exhaustion is not null) profile.RemoveCondition(exhaustion.Id);
+        await progressions.SaveAsync(nextCharacter,updated,profile,Event(character,"RestCompleted",character.Revision+1,
+            new { kind="Long",hpRegained=health.State.Current-before,exhaustionReduced=exhaustion is not null }),ct);
+        return new(sheet with { Revision=character.Revision+1 },[],health.State.Current-before,
+            updated.Resources.Where((x,i) => x.Current != state.Resources[i].Current).ToArray(),
+            exhaustion is null ? ["Temporary HP expired"] : ["Temporary HP expired","Exhaustion reduced by one"]);
+    }
+
+    private async Task<CharacterSheet> Save(Character character, ProgressionState state, CharacterRules rules, CombatContent combat,
+        string eventType, object data, CancellationToken ct)
+    {
+        var nextCharacter = Materialize(character.Id,character.CampaignId,character.Name,state,rules,combat,character.Health,character.Revision);
+        var sheet = CharacterDeriver.Derive(nextCharacter,state,rules,combat);
+        var profile = Profile(character.Id,sheet,combat,await combatStore.GetProfileAsync(character.Id,ct));
+        await progressions.SaveAsync(nextCharacter,state,profile,Event(character,eventType,character.Revision+1,data),ct);
+        return sheet with { Revision=character.Revision+1 };
+    }
+    private async Task<(Character Character,ProgressionState State,CharacterRules Rules,CombatContent Combat)> Load(Guid id,CancellationToken ct)
+    {
+        var character = await campaigns.GetCharacterAsync(id,ct) ?? throw new NotFoundException("Character not found.");
+        var state = await progressions.GetAsync(id,ct) ?? throw new RuleViolation("Legacy imported character has no progression choices; automated Phase 3 operations require a newly created SRD character.");
+        var campaign = await campaigns.GetCampaignAsync(character.CampaignId,ct) ?? throw new NotFoundException("Campaign not found.");
+        return (character,state,await characterCatalog.GetAsync(campaign.Ruleset,ct),await combatCatalog.GetAsync(campaign.Ruleset,ct));
+    }
+    private async Task RequireMutable(Character character,long expected,CancellationToken ct)
+    {
+        if (character.Revision != expected) throw new StateConflictException("Character revision changed. Reload before trying again.");
+        if (await progressions.IsEnrolledAsync(character.Id,ct)) throw new StateConflictException("Character is in an active encounter.");
+    }
+    private static ResourceState[] ResourcesFor(ProgressionState state,CharacterRules rules,ResourceState[] previous)
+    {
+        var result = new List<ResourceState>();
+        foreach (var allocation in state.Classes)
+        {
+            var definition = rules.Classes.Single(x => x.Id == allocation.ClassId);
+            foreach (var feature in definition.Features.Where(f => f.Level <= allocation.Level))
+            foreach (var effect in feature.Effects.Where(e => e.Kind == EffectKind.Resource))
+            {
+                var maximum = effect.Values is { } values ? values[allocation.Level-1] : effect.ScalingAbility is { } ability ?
+                    Math.Max(effect.Amount,new AbilityScore(state.BaseAbilities[ability] + state.BackgroundBonuses.GetValueOrDefault(ability) +
+                        state.AdvancementBonuses.GetValueOrDefault(ability)).Modifier) : effect.Amount;
+                if (maximum <= 0 || result.Any(x => x.Id == effect.Target)) continue;
+                var old = previous.SingleOrDefault(x => x.Id == effect.Target);
+                result.Add(new(effect.Target,$"class:{definition.Id}",old is null ? maximum : Math.Min(maximum,old.Current),maximum,effect.Recovery));
+            }
+        }
+        foreach (var allocation in state.Classes)
+        {
+            var definition = rules.Classes.Single(x => x.Id == allocation.ClassId);
+            foreach (var effect in definition.Features.Where(f => f.Level <= allocation.Level)
+                .SelectMany(f => f.Effects).Where(e => e.Kind == EffectKind.ResourceRecovery))
+            {
+                var index = result.FindIndex(x => x.Id == effect.Target);
+                if (index >= 0) result[index] = result[index] with { Recovery=effect.Recovery };
+            }
+        }
+        return result.ToArray();
+    }
+    private static Proficiency[] FeatProficiencies(Proficiency[]? selected,int expected,string source,CharacterRules rules,
+        IReadOnlyList<Proficiency> existing)
+    {
+        var values = selected ?? [];
+        if (values.Length != expected || values.Select(x => (x.Kind,x.Id)).Distinct().Count() != values.Length)
+            throw new RuleViolation($"Feat requires exactly {expected} distinct proficiency choices.");
+        foreach (var value in values)
+        {
+            if (value.Kind == ProficiencyKind.Skill ? !CharacterDeriver.IsSkillId(value.Id) :
+                value.Kind == ProficiencyKind.Tool ? !(rules.ToolIds ?? []).Contains(value.Id) : true)
+                throw new RuleViolation("Feat proficiency choice must be a canonical skill or tool.");
+            if (existing.Any(x => x.Kind == value.Kind && x.Id == value.Id))
+                throw new RuleViolation("Feat proficiency choice duplicates existing training.");
+        }
+        return values.Select(x => x with { Source=source }).ToArray();
+    }
+    private static Character Materialize(Guid id,Guid campaignId,string name,ProgressionState state,CharacterRules rules,
+        CombatContent combat,HitPoints health,long revision)
+    {
+        var level = state.Classes.Sum(x => x.Level);
+        var abilities = Enum.GetValues<Ability>().ToDictionary(a => a,a => state.BaseAbilities[a] +
+            state.BackgroundBonuses.GetValueOrDefault(a) + state.AdvancementBonuses.GetValueOrDefault(a));
+        // Derive the persisted Phase 1/2 projection from the same choice state used by the rich sheet.
+        var preliminary = new Character(id,campaignId,name,level,abilities,[],[],10,health,revision);
+        var sheet = CharacterDeriver.Derive(preliminary,state,rules,combat);
+        return new Character(id,campaignId,name,level,abilities,
+            sheet.Proficiencies.Where(x => x.Kind == ProficiencyKind.Skill).Select(x => x.Id),
+            sheet.Proficiencies.Where(x => x.Kind == ProficiencyKind.Save).Select(x => Enum.Parse<Ability>(x.Id)),
+            sheet.ArmorClass.Total,health,revision);
+    }
+    private static CombatProfile Profile(Guid id,CharacterSheet sheet,CombatContent combat,CombatProfile? old)
+    {
+        var weaponIds = sheet.Inventory.Where(x => combat.Weapons.Any(w => w.Id == x.DefinitionId))
+            .Select(x => x.Id).ToHashSet();
+        var weapons = old?.State.Weapons.Where(x => weaponIds.Contains(x.Id)).ToList() ?? [];
+        foreach (var item in sheet.Inventory.Where(x => weaponIds.Contains(x.Id) && weapons.All(w => w.Id != x.Id)))
+            weapons.Add(new(item.Id,item.DefinitionId,0));
+        return new(new CombatProfileState(id,sheet.CombatCapabilities,weapons.ToArray(),old?.State.Conditions ?? []));
+    }
+    private CampaignEvent Event(Character character,string type,long revision,object data) =>
+        new(0,Guid.NewGuid(),character.CampaignId,character.Id,type,clock.GetUtcNow(),Ruleset.Current,
+            TimelineSerialization.SchemaVersion,revision,TimelineSerialization.Serialize(data));
+}

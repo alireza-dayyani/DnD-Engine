@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 $repoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot '..'))
 $runDirectory = Join-Path $repoRoot ('artifacts/smoke-' + (Get-Date -Format 'yyyyMMdd-HHmmss'))
 $null = New-Item -ItemType Directory -Path $runDirectory -Force
-$dataDirectory = Join-Path $repoRoot 'data'
+$dataDirectory = Join-Path $runDirectory 'data'
 $assembly = Join-Path $repoRoot 'src/DndEngine.Api/bin/Debug/net10.0/DndEngine.Api.dll'
 if (!(Test-Path -LiteralPath $assembly)) { throw 'Build the solution before running the smoke test.' }
 $baseUrl = "http://127.0.0.1:$Port"

@@ -64,13 +64,21 @@ Future features can supply additional resolved capabilities or introduce focused
 
 Explicit caller facts cover distance, cover, visibility after senses, nearby ranged threats, visible fear sources, and whether movement provokes an opportunity attack. The engine validates range, resources, conditions and supplied facts; it has no map to independently establish them. Unsupported geometry, grip/equipment location, grappling initiation/escape, special speeds and noncombat timed recovery must not be inferred from successful calls. See `COMBAT_API.md` for these boundaries.
 
+## Character progression (Phase 3)
+
+`rules.db.CharacterContent` is a third independent, SHA-256 checked, version-keyed adapted SRD pack. `campaign.db.Progressions` stores a character's chosen species, background, class allocations, feats, bonuses, hit-die pools, resources, inventory and mastery selections. `Characters` remains the shared Phase 1/2 projection for scores, HP, AC and revisions; `CombatProfiles` remains the combat projection. `CharacterDeriver` rebuilds the rich sheet and combat capabilities from the pinned definitions and choice state. It emits modifier/AC/speed provenance, feature sources, and deferred flags. Canonical rules never hold an individual's current resource use or equipment.
+
+`ProgressionService` owns creation, level-up, item and rest use cases. The progression store commits the character row, progression row, combat profile and one event in a single SQLite transaction. Every mutation checks the character revision and unfinished combat membership; stale or enrolled changes fail without rerolling dice. Phase 1/2 imported characters remain readable and mechanically usable through their original endpoints. Phase 3 sheet/progression operations reject them with an explicit legacy-state error because their choices cannot be reconstructed safely.
+
+The rules pack is intentionally pinned rather than silently overwritten. Content changes after a campaign uses a pack need a new version and migration policy. Phase 3 effect kinds cover passive bonuses, proficiencies, resources, senses and mastery slots; feature action execution and spells are deferred. The capability projection synchronizes new inventory weapons into combat; older Phase 2 manual capability imports and weapon grants reject choice-based characters to preserve that authority boundary.
+
 ## Version expansion
 
 Current commands reject versions other than 5.2.1, even if someone manually installs rows for another version. Before 5.2.2 support, add the content alongside 5.2.1 and introduce explicit version-specific resolver dispatch at the Application boundary; keep regression tests for both. Do not change the existing resolver behavior and assume the database pin alone preserves rules. Future rule-version upgrades must be explicit campaign operations with an audit event.
 
 ## Migrations
 
-Both contexts have generated initial migrations and model snapshots under `src/DndEngine.Infrastructure/Migrations`. Startup runs `MigrateAsync`, never `EnsureCreated`. Repository-local tool version is in `dotnet-tools.json`:
+Both contexts have migrations and model snapshots under `src/DndEngine.Infrastructure/Migrations`. Phase 3's additive migrations were authored directly because `dotnet tool restore` could not fetch the pinned EF CLI in this environment; integration tests verify the resulting model and migration snapshots. Startup runs `MigrateAsync`, never `EnsureCreated`. Repository-local tool version is in `dotnet-tools.json`:
 
 ```powershell
 dotnet tool restore

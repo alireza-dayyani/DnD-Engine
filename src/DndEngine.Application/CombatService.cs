@@ -3,7 +3,8 @@ using DndEngine.Domain.Combat;
 
 namespace DndEngine.Application;
 
-public sealed class CombatService(ICampaignStore campaigns, ICombatStore store, ICombatCatalog catalog, IDiceRoller dice, TimeProvider clock)
+public sealed class CombatService(ICampaignStore campaigns, ICombatStore store, ICombatCatalog catalog, IDiceRoller dice, TimeProvider clock,
+    IProgressionStore? progressions = null)
 {
     private sealed record Session(CombatEncounter Encounter, Campaign Campaign, CombatContent Content,
         Dictionary<Guid, Character> Characters, Dictionary<Guid, CombatProfile> Profiles, List<CampaignEvent> Events);
@@ -18,6 +19,8 @@ public sealed class CombatService(ICampaignStore campaigns, ICombatStore store, 
     public async Task<CombatProfileState> ImportAsync(Guid characterId, CombatCapabilities capabilities, CancellationToken ct = default)
     {
         var character = await Character(characterId, ct); var campaign = await Campaign(character.CampaignId, ct);
+        if (progressions is not null && await progressions.GetAsync(characterId,ct) is not null)
+            throw new RuleViolation("Choice-based characters derive combat capabilities from progression; manual import is unavailable.");
         capabilities.Validate(); var content = await catalog.GetAsync(campaign.Ruleset, ct);
         if (capabilities.WeaponProficiencies.Any(id => content.Weapons.All(w => w.Id != id))) throw new RuleViolation("Unknown weapon proficiency.");
         if (await store.IsEnrolledAsync(characterId, ct)) throw new RuleViolation("Import combat capabilities before enrolling in an encounter.");
@@ -29,6 +32,8 @@ public sealed class CombatService(ICampaignStore campaigns, ICombatStore store, 
     public async Task<OwnedWeapon> GrantWeaponAsync(Guid characterId, GrantWeapon request, CancellationToken ct = default)
     {
         var character = await Character(characterId, ct); var campaign = await Campaign(character.CampaignId, ct);
+        if (progressions is not null && await progressions.GetAsync(characterId,ct) is not null)
+            throw new RuleViolation("Use the character inventory endpoint for choice-based characters.");
         var profile = await Profile(characterId, ct);
         if (await store.IsEnrolledAsync(characterId, ct)) throw new RuleViolation("Grant equipment before enrolling in combat.");
         var weapon = (await catalog.GetAsync(campaign.Ruleset, ct)).Weapons.SingleOrDefault(x => x.Id == request.DefinitionId)
