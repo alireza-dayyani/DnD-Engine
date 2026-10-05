@@ -191,6 +191,15 @@ public sealed class ProgressionService(ICampaignStore campaigns, IProgressionSto
         var prepared = await ReplaceSpellsAsync(character,state,classes,
             request.SpellReplacement is null ? [] : [request.SpellReplacement],
             SpellPreparationMoment.ClassLevelGained,next.Id,ct);
+        var additional = request.AdditionalPreparedSpellIds ?? [];
+        if (additional.Length > 0)
+        {
+            var campaign = await campaigns.GetCampaignAsync(character.CampaignId,ct)
+                ?? throw new NotFoundException("Campaign not found.");
+            var catalog = await spellCatalog.GetAsync(campaign.Ruleset,
+                state.SpellPackVersion ?? SpellPackVersions.Initial,ct);
+            prepared = SpellPreparation.Add(prepared,new ClassLevel(next.Id,classLevel),catalog,additional);
+        }
         int dieResult;
         if (request.HpMethod.Equals("Fixed",StringComparison.OrdinalIgnoreCase)) dieResult = next.HitDie / 2 + 1;
         else if (request.HpMethod.Equals("Roll",StringComparison.OrdinalIgnoreCase)) dieResult = dice.Roll(new(1,next.HitDie)).Total;
@@ -214,7 +223,7 @@ public sealed class ProgressionService(ICampaignStore campaigns, IProgressionSto
         var profile = Profile(id,sheet,combat,await combatStore.GetProfileAsync(id,ct));
         await progressions.SaveAsync(nextCharacter,updated,profile,Event(character,"LevelGained",character.Revision+1,
             new { classId=next.Id,classLevel,totalLevel=sheet.Level,hpGain,feat=request.FeatId,
-                spellReplacement=request.SpellReplacement }),ct);
+                spellReplacement=request.SpellReplacement,additionalPreparedSpellIds=additional }),ct);
         return sheet with { Revision = character.Revision+1 };
     }
 
@@ -450,16 +459,7 @@ public sealed class ProgressionService(ICampaignStore campaigns, IProgressionSto
     }
     private static PreparedSpell[] ValidateStartingSpells(string classId,string[]? selected,SpellDefinition[] catalog)
     {
-        var ids = selected ?? [];
-        if (ids.Distinct(StringComparer.Ordinal).Count() != ids.Length)
-            throw new RuleViolation("Prepared spells must be distinct.");
-        foreach (var id in ids)
-        {
-            var spell = catalog.SingleOrDefault(x => x.Id == id);
-            if (spell is null || spell.Level != 1 || !spell.ClassIds.Contains(classId))
-                throw new RuleViolation("Starting spell must be a level 1 spell on the chosen class list.");
-        }
-        return ids.Select(id => new PreparedSpell(classId,id)).ToArray();
+        return SpellPreparation.Add([],new ClassLevel(classId,1),catalog,selected ?? []);
     }
     private static Character Materialize(Guid id,Guid campaignId,string name,ProgressionState state,CharacterRules rules,
         CombatContent combat,HitPoints health,long revision)

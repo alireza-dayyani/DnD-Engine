@@ -259,6 +259,48 @@ public sealed class ProgressionIntegrationTests
         sheet=await service.LevelUpAsync(sheet.Id,new("bard",sheet.Revision,
             SpellReplacement:new("bard","cure-wounds","healing-word")));
         Assert.Equal("healing-word",Assert.Single(sheet.PreparedSpells!).SpellId);
+        sheet=await service.LevelUpAsync(sheet.Id,new("cleric",sheet.Revision,
+            AdditionalPreparedSpellIds:["cure-wounds"]));
+        Assert.Contains(sheet.PreparedSpells!,x=>x.ClassId=="bard" && x.SpellId=="healing-word");
+        Assert.Contains(sheet.PreparedSpells!,x=>x.ClassId=="cleric" && x.SpellId=="cure-wounds");
+        Assert.Equal(4,sheet.Spellcasting!.Classes.Single(x=>x.ClassId=="cleric").PreparedMaximum);
+    }
+
+    [Fact]
+    public async Task ClassLevelUpAddsAnEligiblePreparedSpellAndPersistsItsCapacity()
+    {
+        var path=Path.Combine(Path.GetTempPath(),"DndEngine.SpellAdditionTests",Guid.NewGuid().ToString("N"));
+        Guid id;
+        await using(var provider=Provider(path))
+        {
+            await provider.InitializeDndEngineAsync();
+            await using var scope=provider.CreateAsyncScope();
+            var services=scope.ServiceProvider;
+            var campaign=await services.GetRequiredService<CampaignService>().CreateAsync(new("Spell addition test"));
+            var request=new CreateSrdCharacter(campaign.Id,"Elen","dwarf",null,"Medium","criminal","cleric",
+                Enum.GetValues<Ability>().ToDictionary(a=>a,_=>13),
+                new() { [Ability.Dexterity]=2,[Ability.Constitution]=1 },["history","insight"],
+                PreparedSpellIds:["cure-wounds"]);
+            var service=services.GetRequiredService<ProgressionService>();
+            var sheet=await service.CreateAsync(request);
+            id=sheet.Id;
+            await Assert.ThrowsAsync<RuleViolation>(()=>service.LevelUpAsync(id,new("cleric",sheet.Revision,
+                AdditionalPreparedSpellIds:["cure-wounds"])));
+            sheet=await service.LevelUpAsync(id,new("cleric",sheet.Revision,
+                AdditionalPreparedSpellIds:["healing-word"]));
+            Assert.Equal(2,sheet.PreparedSpells!.Length);
+            var casting=sheet.Spellcasting!.Classes.Single(x=>x.ClassId=="cleric");
+            Assert.Equal(2,casting.PreparedCount);
+            Assert.Equal(5,casting.PreparedMaximum);
+        }
+        await using(var provider=Provider(path))
+        {
+            await provider.InitializeDndEngineAsync();
+            await using var scope=provider.CreateAsyncScope();
+            var sheet=await scope.ServiceProvider.GetRequiredService<ProgressionService>().SheetAsync(id);
+            Assert.Contains(sheet.PreparedSpells!,x=>x.SpellId=="healing-word" && x.ClassId=="cleric");
+            Assert.Equal(5,sheet.Spellcasting!.Classes.Single(x=>x.ClassId=="cleric").PreparedMaximum);
+        }
     }
 
     [Fact]

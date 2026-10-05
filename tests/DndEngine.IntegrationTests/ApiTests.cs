@@ -129,6 +129,12 @@ public class ApiTests
             spellReplacements=new[]{new { classId="cleric",fromSpellId="cure-wounds",toSpellId="healing-word" }}
         })).GetProperty("sheet");
         Assert.Equal("healing-word",sheet.GetProperty("preparedSpells")[0].GetProperty("spellId").GetString());
+        sheet=await Post(client,$"/characters/{id}/level-up",new {
+            classId="cleric",expectedRevision=sheet.GetProperty("revision").GetInt64(),
+            additionalPreparedSpellIds=new[]{"cure-wounds"}
+        });
+        Assert.Equal(2,sheet.GetProperty("spellcasting").GetProperty("classes")[0]
+            .GetProperty("preparedCount").GetInt32());
         await Post(client,$"/characters/{id}/damage",new { amount=8 });
         sheet=await client.GetFromJsonAsync<JsonElement>($"/characters/{id}/sheet");
         var result=await Post(client,$"/characters/{id}/spells/cast-self",new {
@@ -137,7 +143,7 @@ public class ApiTests
         });
         Assert.Equal(6,result.GetProperty("hitPointsRegained").GetInt32());
         Assert.Equal(2,result.GetProperty("rolls").GetArrayLength());
-        Assert.Equal(1,result.GetProperty("sheet").GetProperty("spellcasting")
+        Assert.Equal(2,result.GetProperty("sheet").GetProperty("spellcasting")
             .GetProperty("sharedSlots")[0].GetProperty("current").GetInt32());
     }
     private static async Task<JsonElement> Post(HttpClient client,string url,object body)

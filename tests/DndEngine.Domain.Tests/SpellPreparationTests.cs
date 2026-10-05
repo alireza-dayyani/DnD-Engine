@@ -12,6 +12,40 @@ public class SpellPreparationTests
     ];
 
     [Fact]
+    public void PreparationLimitsUseIndividualClassLevels()
+    {
+        Assert.Equal(4,SpellPreparation.Capacity("bard",1));
+        Assert.Equal(22,SpellPreparation.Capacity("bard",20));
+        Assert.Equal(2,SpellPreparation.Capacity("paladin",1));
+        Assert.Equal(6,SpellPreparation.Capacity("ranger",5));
+        Assert.Equal(4,SpellPreparation.Capacity("sorcerer",2));
+        Assert.Equal(10,SpellPreparation.Capacity("warlock",9));
+        Assert.Equal(21,SpellPreparation.Capacity("wizard",16));
+        Assert.Equal(1,SpellPreparation.MaximumSpellLevel("ranger",4));
+        Assert.Equal(2,SpellPreparation.MaximumSpellLevel("ranger",5));
+        Assert.Equal(2,SpellPreparation.MaximumSpellLevel("warlock",3));
+        Assert.Equal(2,SpellPreparation.MaximumSpellLevel("cleric",3));
+    }
+
+    [Fact]
+    public void AdditionalSpellsRespectClassListCapacityAndClassSpellLevel()
+    {
+        var prepared=SpellPreparation.Add([new("cleric","cure-wounds")],new("bard",1),Catalog,["healing-word"]);
+        Assert.Contains(prepared,x=>x.ClassId=="cleric" && x.SpellId=="cure-wounds");
+        Assert.Contains(prepared,x=>x.ClassId=="bard" && x.SpellId=="healing-word");
+        Assert.Throws<RuleViolation>(()=>SpellPreparation.Add(prepared,new("bard",1),Catalog,["healing-word"]));
+        Assert.Throws<RuleViolation>(()=>SpellPreparation.Add([],new("paladin",1),Catalog,["healing-word"]));
+        Assert.Throws<RuleViolation>(()=>SpellPreparation.Add([],new("wizard",1),Catalog,["cure-wounds"]));
+        Assert.Throws<RuleViolation>(()=>SpellPreparation.Add(
+            [new("bard","a"),new("bard","b"),new("bard","c")],new("bard",1),Catalog,
+            ["cure-wounds","healing-word"]));
+        SpellDefinition[] higher=[new("test-level-2","Test level 2 spell",2,["cleric"],
+            "Action","Self","V",SpellEffectKind.SelfHealing,"test")];
+        Assert.Throws<RuleViolation>(()=>SpellPreparation.Add([],new("cleric",2),higher,["test-level-2"]));
+        Assert.Single(SpellPreparation.Add([],new("cleric",3),higher,["test-level-2"]));
+    }
+
+    [Fact]
     public void RestAndClassLevelReplacementRespectClassTiming()
     {
         PreparedSpell[] prepared=[new("cleric","cure-wounds"),new("bard","cure-wounds")];

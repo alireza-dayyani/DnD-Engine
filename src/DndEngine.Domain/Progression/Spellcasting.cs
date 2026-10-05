@@ -4,7 +4,7 @@ namespace DndEngine.Domain.Progression;
 
 public sealed record SpellSlotPool(int SpellLevel, int Maximum, int Current, string Source, RecoveryKind Recovery);
 public sealed record ClassSpellcasting(string ClassId, int ClassLevel, Ability Ability, int AbilityModifier,
-    int SpellAttackBonus, int SpellSaveDc);
+    int SpellAttackBonus, int SpellSaveDc, int PreparedCount, int PreparedMaximum);
 public sealed record SpellcastingSummary(ClassSpellcasting[] Classes, SpellSlotPool[] SharedSlots,
     SpellSlotPool? PactMagicSlots);
 
@@ -37,7 +37,10 @@ public static class SpellSlotCalculator
         {
             var ability = AbilityFor(x.ClassId)!.Value;
             var modifier = character.AbilityModifier(ability);
-            return new ClassSpellcasting(x.ClassId,x.Level,ability,modifier,character.Level.ProficiencyBonus+modifier,8+character.Level.ProficiencyBonus+modifier);
+            return new ClassSpellcasting(x.ClassId,x.Level,ability,modifier,
+                character.Level.ProficiencyBonus+modifier,8+character.Level.ProficiencyBonus+modifier,
+                (state.PreparedSpells ?? []).Count(s => s.ClassId == x.ClassId),
+                SpellPreparation.Capacity(x.ClassId,x.Level));
         }).ToArray();
         var slotClasses = casters.Where(x => x.ClassId != "warlock").ToArray();
         var casterLevel = slotClasses.Sum(x => x.ClassId is "paladin" or "ranger" ? (x.Level+1)/2 : x.Level);

@@ -12,7 +12,8 @@ public sealed record CreateSrdCharacter(Guid CampaignId, string Name, string Spe
 public sealed record LevelUpCharacter(string ClassId, long ExpectedRevision, string HpMethod = "Fixed",
     string? FeatId = null, Dictionary<Ability,int>? AbilityIncreases = null, string? MulticlassSkill = null,
     string? SubclassId = null, string? FightingStyleFeat = null, string? MulticlassTool = null,
-    Proficiency[]? FeatProficiencies = null, SpellReplacement? SpellReplacement = null);
+    Proficiency[]? FeatProficiencies = null, SpellReplacement? SpellReplacement = null,
+    string[]? AdditionalPreparedSpellIds = null);
 public sealed record ItemChange(string DefinitionId, long ExpectedRevision);
 public sealed record EquipItem(Guid ItemId, long ExpectedRevision);
 public sealed record ShortRestRequest(int[] HitDieSides, long ExpectedRevision);
