@@ -16,25 +16,69 @@ public sealed class SpellContentRow
     public string DataJson { get; set; } = "";
 }
 
+public sealed class SpellPackRow
+{
+    public string RulesetId { get; set; } = "";
+    public string RulesetVersion { get; set; } = "";
+    public string PackVersion { get; set; } = "";
+    public string ContentHash { get; set; } = "";
+    public string DataJson { get; set; } = "";
+}
+
 public sealed class SpellCatalog(RulesDbContext db) : ISpellCatalog
 {
-    public async Task<SpellDefinition[]> GetAsync(Ruleset ruleset, CancellationToken ct)
+    private sealed record InitialSpellDefinition(string Id, string Name, int Level, string[] ClassIds,
+        string CastingTime, string Range, string Components, SpellEffectKind Effect, string Source);
+
+    public async Task<SpellDefinition[]> GetAsync(Ruleset ruleset, string packVersion, CancellationToken ct)
     {
         ruleset.RequireSupported();
-        var row = await db.SpellContent.AsNoTracking().SingleOrDefaultAsync(x =>
-            x.RulesetId == ruleset.Id && x.Version == ruleset.Version,ct)
-            ?? throw new RuleViolation("Spell content is not installed for this ruleset.");
-        return JsonSerializer.Deserialize<SpellDefinition[]>(row.DataJson,CombatCatalog.Json)!;
+        string json;
+        if (packVersion == SpellPackVersions.Initial)
+            json = (await db.SpellContent.AsNoTracking().SingleOrDefaultAsync(x =>
+                x.RulesetId == ruleset.Id && x.Version == ruleset.Version,ct))?.DataJson
+                ?? throw new RuleViolation("Initial spell pack is not installed for this ruleset.");
+        else
+            json = (await db.SpellPacks.AsNoTracking().SingleOrDefaultAsync(x =>
+                x.RulesetId == ruleset.Id && x.RulesetVersion == ruleset.Version && x.PackVersion == packVersion,ct))?.DataJson
+                ?? throw new RuleViolation("Spell pack is not installed for this ruleset.");
+        var spells = JsonSerializer.Deserialize<SpellDefinition[]>(json,CombatCatalog.Json)!;
+        return packVersion == SpellPackVersions.Initial
+            ? spells.Select(x => x.Id == "cure-wounds" ? x with { DicePerSlotLevel=2,DieSides=8 } : x).ToArray()
+            : spells;
     }
 
     public static async Task ImportAsync(RulesDbContext db, CancellationToken ct)
     {
-        // An intentionally narrow, executable starter catalog. Further SRD spells require a new content version.
-        SpellDefinition[] content = [new("cure-wounds","Cure Wounds",1,
+        // Keep the original serialized shape byte-for-byte so existing pinned databases still start.
+        InitialSpellDefinition[] initial = [new("cure-wounds","Cure Wounds",1,
             ["bard","cleric","druid","paladin","ranger"],"Action","Touch","V,S",
             SpellEffectKind.SelfHealing,"SRD 5.2.1 p. 121")];
-        var json = JsonSerializer.Serialize(content,CombatCatalog.Json);
-        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(json)));
+        await ImportInitialAsync(db,JsonSerializer.Serialize(initial,CombatCatalog.Json),ct);
+        SpellDefinition[] current = [
+            new("cure-wounds","Cure Wounds",1,["bard","cleric","druid","paladin","ranger"],
+                "Action","Touch","V,S",SpellEffectKind.SelfHealing,"SRD 5.2.1 p. 121",2,8),
+            new("healing-word","Healing Word",1,["bard","cleric","druid"],
+                "Bonus Action","60 feet","V",SpellEffectKind.SelfHealing,"SRD 5.2.1 p. 139",2,4)
+        ];
+        var json = JsonSerializer.Serialize(current,CombatCatalog.Json);
+        var hash = Hash(json);
+        var pack = await db.SpellPacks.SingleOrDefaultAsync(x => x.RulesetId == Ruleset.Current.Id &&
+            x.RulesetVersion == Ruleset.Current.Version && x.PackVersion == SpellPackVersions.Current,ct);
+        if (pack is not null)
+        {
+            if (pack.ContentHash != hash || pack.DataJson != json)
+                throw new InvalidOperationException("Pinned spell pack differs; refusing to overwrite it.");
+            return;
+        }
+        db.SpellPacks.Add(new() { RulesetId=Ruleset.Current.Id,RulesetVersion=Ruleset.Current.Version,
+            PackVersion=SpellPackVersions.Current,ContentHash=hash,DataJson=json });
+        await db.SaveChangesAsync(ct);
+    }
+
+    private static async Task ImportInitialAsync(RulesDbContext db, string json, CancellationToken ct)
+    {
+        var hash = Hash(json);
         var existing = await db.SpellContent.SingleOrDefaultAsync(x =>
             x.RulesetId == Ruleset.Current.Id && x.Version == Ruleset.Current.Version,ct);
         if (existing is not null)
@@ -47,4 +91,6 @@ public sealed class SpellCatalog(RulesDbContext db) : ISpellCatalog
             ContentHash=hash,DataJson=json });
         await db.SaveChangesAsync(ct);
     }
+
+    private static string Hash(string json) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(json)));
 }

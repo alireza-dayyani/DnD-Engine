@@ -4,6 +4,11 @@ using DndEngine.Domain.Progression;
 using DndEngine.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
+using System.Text.Json.Nodes;
 
 namespace DndEngine.IntegrationTests;
 
@@ -83,6 +88,7 @@ public sealed class ProgressionIntegrationTests
                 PreparedSpellIds:["cure-wounds"]);
             var service=services.GetRequiredService<ProgressionService>();
             var sheet=await service.CreateAsync(request);
+            Assert.Equal(SpellPackVersions.Current,sheet.SpellPackVersion);
             Assert.Contains(sheet.PreparedSpells!,x=>x.ClassId=="cleric" && x.SpellId=="cure-wounds");
             sheet=await service.LevelUpAsync(sheet.Id,new("warlock",sheet.Revision));
             id=sheet.Id; healedMaximum=sheet.MaximumHp;
@@ -110,7 +116,83 @@ public sealed class ProgressionIntegrationTests
             Assert.Contains(sheet.PreparedSpells!,x=>x.SpellId=="cure-wounds");
             var events=await services.GetRequiredService<CampaignService>().EventsAsync(sheet.CampaignId);
             Assert.Contains(events,x=>x.Type=="SpellCast");
-            Assert.Single(await service.SpellChoicesAsync());
+            Assert.Equal(2,(await service.SpellChoicesAsync()).Length);
+        }
+    }
+
+    [Fact]
+    public async Task ExistingUnversionedCharacterKeepsInitialSpellPackAfterRestart()
+    {
+        var path=Path.Combine(Path.GetTempPath(),"DndEngine.SpellPackTests",Guid.NewGuid().ToString("N"));
+        Guid id;
+        await using(var provider=Provider(path))
+        {
+            await provider.InitializeDndEngineAsync();
+            await using var scope=provider.CreateAsyncScope();
+            var services=scope.ServiceProvider;
+            var campaign=await services.GetRequiredService<CampaignService>().CreateAsync(new("Pinned spell test"));
+            var request=new CreateSrdCharacter(campaign.Id,"Elen","dwarf",null,"Medium","criminal","cleric",
+                Enum.GetValues<Ability>().ToDictionary(a=>a,_=>13),
+                new() { [Ability.Dexterity]=2,[Ability.Constitution]=1 },["history","insight"],
+                PreparedSpellIds:["cure-wounds"]);
+            id=(await services.GetRequiredService<ProgressionService>().CreateAsync(request)).Id;
+            var db=services.GetRequiredService<CampaignDbContext>();
+            var row=await db.Progressions.SingleAsync(x=>x.CharacterId==id);
+            var state=JsonNode.Parse(row.StateJson)!.AsObject();
+            Assert.True(state.Remove("spellPackVersion"));
+            row.StateJson=state.ToJsonString();
+            await db.SaveChangesAsync();
+        }
+        await using(var provider=Provider(path,3,4))
+        {
+            await provider.InitializeDndEngineAsync();
+            await using var scope=provider.CreateAsyncScope();
+            var services=scope.ServiceProvider;
+            var service=services.GetRequiredService<ProgressionService>();
+            var sheet=await service.SheetAsync(id);
+            Assert.Equal(SpellPackVersions.Initial,sheet.SpellPackVersion);
+            var catalog=services.GetRequiredService<ISpellCatalog>();
+            Assert.Single(await catalog.GetAsync(Ruleset.Current,SpellPackVersions.Initial,default));
+            Assert.Equal(2,(await catalog.GetAsync(Ruleset.Current,SpellPackVersions.Current,default)).Length);
+            await services.GetRequiredService<MechanicsService>().DamageAsync(id,new(6));
+            sheet=await service.SheetAsync(id);
+            var cast=await service.CastPreparedSpellAsync(id,
+                new("cleric","cure-wounds",SpellSlotPoolKind.Shared,1,sheet.Revision,true));
+            Assert.Equal(6,cast.HitPointsRegained);
+            Assert.Equal(SpellPackVersions.Initial,cast.Sheet.SpellPackVersion);
+        }
+    }
+
+    [Fact]
+    public async Task ExistingRulesDatabaseMigratesWithoutChangingItsPinnedInitialPack()
+    {
+        var path=Path.Combine(Path.GetTempPath(),"DndEngine.SpellPackMigrationTests",Guid.NewGuid().ToString("N"));
+        string initialHash;
+        await using(var provider=Provider(path))
+        {
+            await using var scope=provider.CreateAsyncScope();
+            var rules=scope.ServiceProvider.GetRequiredService<RulesDbContext>();
+            await rules.Database.MigrateAsync("20261005204700_SpellContent");
+            await RulesCatalog.ImportAsync(rules);
+            var json=JsonSerializer.Serialize(new[] { new {
+                Id="cure-wounds",Name="Cure Wounds",Level=1,
+                ClassIds=new[]{"bard","cleric","druid","paladin","ranger"},
+                CastingTime="Action",Range="Touch",Components="V,S",
+                Effect=SpellEffectKind.SelfHealing,Source="SRD 5.2.1 p. 121"
+            } },new JsonSerializerOptions(JsonSerializerDefaults.Web) { Converters = { new JsonStringEnumConverter() } });
+            initialHash=Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(json)));
+            rules.SpellContent.Add(new() { RulesetId=Ruleset.Current.Id,Version=Ruleset.Current.Version,
+                ContentHash=initialHash,DataJson=json });
+            await rules.SaveChangesAsync();
+        }
+        await using(var provider=Provider(path))
+        {
+            await provider.InitializeDndEngineAsync();
+            await using var scope=provider.CreateAsyncScope();
+            var rules=scope.ServiceProvider.GetRequiredService<RulesDbContext>();
+            Assert.Equal(initialHash,(await rules.SpellContent.SingleAsync()).ContentHash);
+            Assert.Single(await rules.SpellPacks.ToArrayAsync());
+            Assert.False(rules.Database.HasPendingModelChanges());
         }
     }
 
@@ -152,7 +234,7 @@ public sealed class ProgressionIntegrationTests
             var sheet=await services.GetRequiredService<ProgressionService>().SheetAsync(id);
             Assert.Equal(2,sheet.Level); Assert.Equal(17,sheet.ArmorClass.Total);
             Assert.Equal(2,sheet.HitDice.Single().Available);
-            Assert.Equal(4,(await services.GetRequiredService<RulesDbContext>().Database.GetAppliedMigrationsAsync()).Count());
+            Assert.Equal(5,(await services.GetRequiredService<RulesDbContext>().Database.GetAppliedMigrationsAsync()).Count());
             Assert.Equal(3,(await services.GetRequiredService<CampaignDbContext>().Database.GetAppliedMigrationsAsync()).Count());
             Assert.False(services.GetRequiredService<RulesDbContext>().Database.HasPendingModelChanges());
             var events=await services.GetRequiredService<CampaignService>().EventsAsync(campaignId);

@@ -33,7 +33,7 @@ public interface ICharacterRulesCatalog
 }
 public interface ISpellCatalog
 {
-    Task<SpellDefinition[]> GetAsync(Ruleset ruleset, CancellationToken ct);
+    Task<SpellDefinition[]> GetAsync(Ruleset ruleset, string packVersion, CancellationToken ct);
 }
 public interface IProgressionStore
 {

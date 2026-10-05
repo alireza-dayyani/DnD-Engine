@@ -195,7 +195,8 @@ public static class CharacterDeriver
             character.Health.State.Maximum,character.Health.State.Current,character.Health.State.Temporary,state.HitDice,
             armorClass,speed,proficiencies.ToArray(),features.ToArray(),state.FeatIds,state.Resources, state.Inventory,
             state.MasteredWeaponIds,capabilities,state.SubclassIds,abilityBreakdowns,new(speed,speedParts.ToArray()),
-            untrainedArmor,untrainedArmor,darkvision,SpellSlotCalculator.Derive(character,state),state.PreparedSpells ?? []);
+            untrainedArmor,untrainedArmor,darkvision,SpellSlotCalculator.Derive(character,state),state.PreparedSpells ?? [],
+            state.SpellPackVersion ?? SpellPackVersions.Initial);
     }
 
     public static ItemDefinition FindItem(string id, CharacterRules rules, CombatContent combat) =>

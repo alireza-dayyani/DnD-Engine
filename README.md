@@ -1,6 +1,6 @@
 # D&D campaign engine — Phase 4 foundation
 
-A local .NET 10 backend for SRD 5.2.1 character choices and progression, weapon combat, persistent campaign state, and an audit timeline. A future AI Dungeon Master supplies interpretation and narration; the engine owns dice and state. Phase 4 now includes derived spellcasting, durable slot expenditure, and one prepared self-healing spell. Broader spellcasting is still in progress; there are no AI calls, MCP or graphical UI.
+A local .NET 10 backend for SRD 5.2.1 character choices and progression, weapon combat, persistent campaign state, and an audit timeline. A future AI Dungeon Master supplies interpretation and narration; the engine owns dice and state. Phase 4 now includes derived spellcasting, durable slot expenditure, and two prepared self-healing spells. Broader spellcasting is still in progress; there are no AI calls, MCP or graphical UI.
 
 ## Run
 
@@ -31,7 +31,7 @@ Validated character sheet import; six scores; levels 1–20 and derived proficie
 
 Phase 2 adds encounter lifecycle, shared monster initiative and explicit ties, durable turns/rounds, action/bonus/reaction resources, movement/Dash/Dodge/Disengage, weapon ownership and ammunition, typed attacks/criticals/damage mitigation, source-aware conditions, combat saves, and automatic death saves at turn start. See [combat API and boundaries](docs/COMBAT_API.md).
 
-Phase 3 adds a choice-based path to create an SRD character and derive its mechanical sheet. It models 9 species, 4 backgrounds, 12 classes, feats, levels 1–20, passive feature effects, multiclassing foundations, class resources, armor and inventory, hit dice and rests. Phase 4 derives each casting class's ability, attack bonus and save DC, shared multiclass spell slots, and Warlock Pact Magic slots. Slot expenditure persists and rests restore the applicable pool. The pinned starter spell catalog currently contains Cure Wounds; an SRD character can prepare it at creation and cast it on themselves outside combat. See [character API](docs/CHARACTER_API.md), [Phase 3 report](docs/PHASE3_REPORT.md), and [Phase 4 report](docs/PHASE4_REPORT.md). Many active class/subclass/feat/species powers remain deferred.
+Phase 3 adds a choice-based path to create an SRD character and derive its mechanical sheet. It models 9 species, 4 backgrounds, 12 classes, feats, levels 1–20, passive feature effects, multiclassing foundations, class resources, armor and inventory, hit dice and rests. Phase 4 derives each casting class's ability, attack bonus and save DC, shared multiclass spell slots, and Warlock Pact Magic slots. Slot expenditure persists and rests restore the applicable pool. The current pinned spell pack contains Cure Wounds and Healing Word; an SRD character can prepare eligible spells at creation and cast them on themselves outside combat. See [character API](docs/CHARACTER_API.md), [Phase 3 report](docs/PHASE3_REPORT.md), and [Phase 4 report](docs/PHASE4_REPORT.md). Many active class/subclass/feat/species powers remain deferred.
 
 ## Development API
 
@@ -45,7 +45,7 @@ Phase 3 adds a choice-based path to create an SRD character and derive its mecha
 | GET | `/characters/{id}/spellcasting` | Casting abilities and current/maximum slot balances |
 | GET | `/spells` | Read the pinned starter spell catalog |
 | POST | `/characters/{id}/spell-slots/spend` | Record one shared or Pact Magic slot expenditure |
-| POST | `/characters/{id}/spells/cast-self` | Cast prepared Cure Wounds on the caster outside combat |
+| POST | `/characters/{id}/spells/cast-self` | Cast a prepared self-healing spell on the caster outside combat |
 | POST | `/characters/{id}/inventory`, `/inventory/equip`, `/inventory/unequip`, `/inventory/remove` | Acquire and equip items |
 | POST | `/characters/{id}/resources/spend`, `/rests/short`, `/rests/long` | Resource use and recovery |
 | POST | `/characters/{id}/checks/ability` | Plain ability check |

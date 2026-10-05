@@ -7,7 +7,8 @@ public static class ProgressionEndpoints
     public static void MapProgression(this WebApplication app)
     {
         app.MapGet("/character-choices", (ProgressionService service,CancellationToken ct) => service.ChoicesAsync(ct));
-        app.MapGet("/spells", (ProgressionService service,CancellationToken ct) => service.SpellChoicesAsync(ct));
+        app.MapGet("/spells", (string? packVersion,ProgressionService service,CancellationToken ct) =>
+            service.SpellChoicesAsync(packVersion,ct));
         app.MapPost("/srd-characters", async (CreateSrdCharacter request,ProgressionService service,CancellationToken ct) =>
         {
             var sheet = await service.CreateAsync(request,ct);

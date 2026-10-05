@@ -11,7 +11,8 @@ public sealed class ProgressionService(ICampaignStore campaigns, IProgressionSto
     public async Task<CharacterRules> ChoicesAsync(CancellationToken ct = default) =>
         await characterCatalog.GetAsync(Ruleset.Current,ct);
 
-    public Task<SpellDefinition[]> SpellChoicesAsync(CancellationToken ct = default) => spellCatalog.GetAsync(Ruleset.Current,ct);
+    public Task<SpellDefinition[]> SpellChoicesAsync(string? packVersion = null, CancellationToken ct = default) =>
+        spellCatalog.GetAsync(Ruleset.Current,packVersion ?? SpellPackVersions.Current,ct);
 
     public async Task<CharacterSheet> CreateAsync(CreateSrdCharacter request, CancellationToken ct = default)
     {
@@ -19,7 +20,7 @@ public sealed class ProgressionService(ICampaignStore campaigns, IProgressionSto
         campaign.Ruleset.RequireSupported();
         var rules = await characterCatalog.GetAsync(campaign.Ruleset,ct);
         var combat = await combatCatalog.GetAsync(campaign.Ruleset,ct);
-        var spells = await spellCatalog.GetAsync(campaign.Ruleset,ct);
+        var spells = await spellCatalog.GetAsync(campaign.Ruleset,SpellPackVersions.Current,ct);
         var species = rules.Species.SingleOrDefault(x => x.Id == request.SpeciesId) ?? throw new RuleViolation("Unknown species.");
         var background = rules.Backgrounds.SingleOrDefault(x => x.Id == request.BackgroundId) ?? throw new RuleViolation("Unknown background.");
         var @class = rules.Classes.SingleOrDefault(x => x.Id == request.ClassId) ?? throw new RuleViolation("Unknown class.");
@@ -66,7 +67,8 @@ public sealed class ProgressionService(ICampaignStore campaigns, IProgressionSto
         var maxHp = Math.Max(1,@class.HitDie + constitution + speciesHp);
         state = state with { MaximumHp = maxHp, Resources = ResourcesFor(state,rules,[]),
             BackgroundToolId=request.BackgroundToolId, ClassTools=request.ClassTools ?? [],ExtraProficiencies=featProficiencies,
-            PreparedSpells=ValidateStartingSpells(@class.Id,request.PreparedSpellIds,spells) };
+            PreparedSpells=ValidateStartingSpells(@class.Id,request.PreparedSpellIds,spells),
+            SpellPackVersion=SpellPackVersions.Current };
         var character = Materialize(Guid.NewGuid(),campaign.Id,request.Name,state,rules,combat,new HitPoints(maxHp),0);
         var sheet = CharacterDeriver.Derive(character,state,rules,combat);
         var profile = Profile(character.Id,sheet,combat,null);
@@ -273,7 +275,8 @@ public sealed class ProgressionService(ICampaignStore campaigns, IProgressionSto
         var sheet = CharacterDeriver.Derive(character,state,rules,combat);
         if (sheet.SpellcastingBlockedByArmor) throw new RuleViolation("Untrained armor prevents spellcasting.");
         var campaign = await campaigns.GetCampaignAsync(character.CampaignId,ct) ?? throw new NotFoundException("Campaign not found.");
-        var spell = (await spellCatalog.GetAsync(campaign.Ruleset,ct)).SingleOrDefault(x => x.Id == request.SpellId)
+        var spell = (await spellCatalog.GetAsync(campaign.Ruleset,state.SpellPackVersion ?? SpellPackVersions.Initial,ct))
+            .SingleOrDefault(x => x.Id == request.SpellId)
             ?? throw new RuleViolation("Spell is not in the installed catalog.");
         if (!(state.PreparedSpells ?? []).Any(x => x.ClassId == request.ClassId && x.SpellId == spell.Id) ||
             !spell.ClassIds.Contains(request.ClassId))
@@ -281,10 +284,10 @@ public sealed class ProgressionService(ICampaignStore campaigns, IProgressionSto
         if (request.SpellLevel < spell.Level) throw new RuleViolation("Spell slot is below the spell's level.");
         var casting = sheet.Spellcasting?.Classes.SingleOrDefault(x => x.ClassId == request.ClassId)
             ?? throw new RuleViolation("Class has no spellcasting feature.");
-        if (spell.Effect != SpellEffectKind.SelfHealing || spell.Id != "cure-wounds")
+        if (spell.Effect != SpellEffectKind.SelfHealing || spell.DicePerSlotLevel <= 0 || spell.DieSides <= 0)
             throw new RuleViolation("Spell effect is not implemented.");
         var (usage,before) = SpellSlotCalculator.Spend(character,state,request.Pool,request.SpellLevel);
-        var rolls = dice.Roll(new(2*request.SpellLevel,8));
+        var rolls = dice.Roll(new(spell.DicePerSlotLevel*request.SpellLevel,spell.DieSides));
         var healing = Math.Max(0,rolls.Total+casting.AbilityModifier);
         var change = character.Health.Heal(healing);
         var updated = state with { SpellSlots=usage };

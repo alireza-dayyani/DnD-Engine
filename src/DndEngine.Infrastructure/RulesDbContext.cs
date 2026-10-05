@@ -25,6 +25,7 @@ public sealed class RulesDbContext(DbContextOptions<RulesDbContext> options) : D
     public DbSet<CombatContentRow> CombatContent => Set<CombatContentRow>();
     public DbSet<CharacterContentRow> CharacterContent => Set<CharacterContentRow>();
     public DbSet<SpellContentRow> SpellContent => Set<SpellContentRow>();
+    public DbSet<SpellPackRow> SpellPacks => Set<SpellPackRow>();
     protected override void OnModelCreating(ModelBuilder model)
     {
         model.Entity<RulesetRow>().HasKey(x => new { x.Id, x.Version });
@@ -33,6 +34,9 @@ public sealed class RulesDbContext(DbContextOptions<RulesDbContext> options) : D
         model.Entity<CharacterContentRow>().HasOne<RulesetRow>().WithMany().HasForeignKey(x => new { x.RulesetId, x.Version }).OnDelete(DeleteBehavior.Restrict);
         model.Entity<SpellContentRow>().HasKey(x => new { x.RulesetId, x.Version });
         model.Entity<SpellContentRow>().HasOne<RulesetRow>().WithMany().HasForeignKey(x => new { x.RulesetId, x.Version }).OnDelete(DeleteBehavior.Restrict);
+        model.Entity<SpellPackRow>().HasKey(x => new { x.RulesetId, x.RulesetVersion, x.PackVersion });
+        model.Entity<SpellPackRow>().HasOne<RulesetRow>().WithMany()
+            .HasForeignKey(x => new { x.RulesetId, x.RulesetVersion }).OnDelete(DeleteBehavior.Restrict);
         model.Entity<CombatContentRow>().HasOne<RulesetRow>().WithMany().HasForeignKey(x => new { x.RulesetId, x.Version }).OnDelete(DeleteBehavior.Restrict);
         model.Entity<SkillRow>().HasKey(x => new { x.RulesetId, x.Version, x.Id });
         model.Entity<SkillRow>().HasOne<RulesetRow>().WithMany().HasForeignKey(x => new { x.RulesetId, x.Version }).OnDelete(DeleteBehavior.Restrict);
