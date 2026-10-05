@@ -1,6 +1,6 @@
 # D&D campaign engine — Phase 4 foundation
 
-A local .NET 10 backend for SRD 5.2.1 character choices and progression, weapon combat, persistent campaign state, and an audit timeline. A future AI Dungeon Master supplies interpretation and narration; the engine owns dice and state. Phase 4 delivers a bounded seven-spell magic engine with versioned choices, combat casting and persistent effects. It is not a complete SRD spell implementation. There are no AI calls, MCP or graphical UI.
+A local .NET 10 backend for SRD 5.2.1 character choices and progression, weapon combat, persistent campaign state, and an audit timeline. A future AI Dungeon Master supplies interpretation and narration; the engine owns dice and state. Phase 4 delivers a bounded ten-spell magic engine with versioned choices, combat casting and persistent effects. It is not a complete SRD spell implementation. There are no AI calls, MCP or graphical UI.
 
 ## Run
 
@@ -31,7 +31,7 @@ Validated character sheet import; six scores; levels 1–20 and derived proficie
 
 Phase 2 adds encounter lifecycle, shared monster initiative and explicit ties, durable turns/rounds, action/bonus/reaction resources, movement/Dash/Dodge/Disengage, weapon ownership and ammunition, typed attacks/criticals/damage mitigation, source-aware conditions, combat saves, and automatic death saves at turn start. See [combat API and boundaries](docs/COMBAT_API.md).
 
-Phase 3 adds a choice-based path to create an SRD character and derive its mechanical sheet. It models 9 species, 4 backgrounds, 12 classes, feats, levels 1–20, passive feature effects, multiclassing foundations, class resources, armor and inventory, hit dice and rests. Phase 4 derives class casting stats, multiclass and Pact Magic slots, and preparation/cantrip limits. The current pack adds two cantrips, area damage, Blur concentration and Mystic Arcanum to the earlier healing spells. Character choices include Wizard books, a Fiend spell grant and two Sorcerer Metamagic options. Combat casting spends the correct turn/resource budget and atomically saves target HP, spell resources and audit events. See [Magic API](docs/MAGIC_API.md), [Phase 3 report](docs/PHASE3_REPORT.md), and [Phase 4 report](docs/PHASE4_REPORT.md). Many active class/subclass/feat/species powers remain deferred.
+Phase 3 adds a choice-based path to create an SRD character and derive its mechanical sheet. It models 9 species, 4 backgrounds, 12 classes, feats, levels 1–20, passive feature effects, multiclassing foundations, class resources, armor and inventory, hit dice and rests. Phase 4 derives class casting stats, multiclass and Pact Magic slots, and preparation/cantrip limits. The current pack has five cantrips, area damage, Blur concentration and Mystic Arcanum. Character choices include Wizard books, a Fiend spell grant and four Sorcerer Metamagic options. Font of Magic, Arcane Recovery, Sorcerous Restoration and Memorize Spell have executable paths. Combat casting spends the correct turn/resource budget and atomically saves target HP, spell resources and audit events. See [Magic API](docs/MAGIC_API.md), [Phase 3 report](docs/PHASE3_REPORT.md), and [Phase 4 report](docs/PHASE4_REPORT.md). Many active class/subclass/feat/species powers remain deferred.
 
 ## Development API
 
@@ -43,7 +43,7 @@ Phase 3 adds a choice-based path to create an SRD character and derive its mecha
 | GET / POST | `/character-choices`, `/srd-characters` | Read choices/create choice-based SRD character |
 | GET / POST | `/characters/{id}/sheet`, `/characters/{id}/level-up` | Derived sheet and progression |
 | GET | `/characters/{id}/spellcasting` | Casting abilities and current/maximum slot balances |
-| GET | `/spells` | Read an immutable spell pack (current pack 3 by default) |
+| GET | `/spells` | Read an immutable spell pack (current pack 4 by default) |
 | POST | `/characters/{id}/spell-slots/spend` | Record one shared or Pact Magic slot expenditure |
 | POST | `/characters/{id}/spells/cast-self` | Cast a prepared self-healing spell on the caster outside combat |
 | POST | `/characters/{id}/spell-pack/adopt` | Explicitly adopt current spell content |

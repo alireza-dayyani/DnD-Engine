@@ -32,7 +32,13 @@ public sealed record AttackCombatant(Guid CombatantId, WeaponAttackOptions Attac
 public sealed record CastCombatSpell(Guid CombatantId, string ClassId, string SpellId,
     SpellSlotPoolKind? Pool, int SpellLevel, SpellTargetContext[] Targets,
     bool VerbalAvailable, bool SomaticAvailable, bool MaterialAvailable, long ExpectedRevision,
-    MetamagicOption? Metamagic = null, int? AreaCenterDistanceFeet = null);
+    MetamagicOption? Metamagic = null, int? AreaCenterDistanceFeet = null,
+    Guid? MetamagicTargetId = null);
+public sealed record CombatConvertSpellSlot(Guid CombatantId, SpellSlotPoolKind Pool,
+    int SpellLevel, long ExpectedRevision);
+public sealed record CombatCreateSorcerySlot(Guid CombatantId, int SpellLevel, long ExpectedRevision);
+public sealed record FontOfMagicResult(Guid CombatantId, int SorceryPointsAfter,
+    SpellcastingSummary Spellcasting, TurnResources Resources);
 public sealed record ApplyCombatCondition(Guid CombatantId, ConditionKind Kind, string Source,
     Guid? SourceCharacterId = null, ExpiryBoundary Expiry = ExpiryBoundary.Manual, long? ExpiresOnTurn = null);
 public sealed record CombatSavingThrow(Guid CombatantId, CheckRequest Check);

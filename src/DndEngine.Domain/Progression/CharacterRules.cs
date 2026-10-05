@@ -40,7 +40,8 @@ public sealed record ResourceState(string Id, string Source, int Current, int Ma
 public sealed record HitDiePool(int Sides, int Total, int Available);
 public sealed record InventoryItem(Guid Id, string DefinitionId, bool Equipped = false);
 public sealed record ClassLevel(string ClassId, int Level);
-public sealed record SpellSlotUsage(int[] SharedSpentByLevel, int PactSpent);
+public sealed record SpellSlotUsage(int[] SharedSpentByLevel, int PactSpent,
+    int[]? CreatedAvailableByLevel = null);
 
 public sealed record ProgressionState(string SpeciesId, string? SpeciesVariantId, string Size, string BackgroundId,
     Dictionary<Ability, int> BaseAbilities, Dictionary<Ability, int> BackgroundBonuses, Dictionary<Ability, int> AdvancementBonuses,
@@ -51,7 +52,8 @@ public sealed record ProgressionState(string SpeciesId, string? SpeciesVariantId
     SpellSlotUsage? SpellSlots = null, PreparedSpell[]? PreparedSpells = null, string? SpellPackVersion = null,
     KnownCantrip[]? KnownCantrips = null, string[]? WizardSpellbookIds = null,
     MetamagicOption[]? MetamagicOptions = null, int SorceryPointsSpent = 0,
-    Dictionary<int,string>? MysticArcanumChoices = null, int[]? MysticArcanumSpentLevels = null);
+    Dictionary<int,string>? MysticArcanumChoices = null, int[]? MysticArcanumSpentLevels = null,
+    bool ArcaneRecoveryUsed = false, bool SorcerousRestorationUsed = false);
 
 public sealed record StatisticPart(string Source, int Value);
 public sealed record DerivedStatistic(int Total, StatisticPart[] Parts);
@@ -72,4 +74,5 @@ public sealed record CharacterSheet(Guid Id, Guid CampaignId, string Name, long 
     string[]? WizardSpellbookIds = null, MetamagicOption[]? MetamagicOptions = null,
     int SorceryPointsCurrent = 0, int SorceryPointsMaximum = 0,
     PreparedSpell[]? AlwaysPreparedSpells = null,
-    IReadOnlyDictionary<int,string>? MysticArcanumChoices = null, int[]? MysticArcanumSpentLevels = null);
+    IReadOnlyDictionary<int,string>? MysticArcanumChoices = null, int[]? MysticArcanumSpentLevels = null,
+    bool ArcaneRecoveryUsed = false, bool SorcerousRestorationUsed = false);

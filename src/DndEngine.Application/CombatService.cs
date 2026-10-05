@@ -120,12 +120,21 @@ public sealed class CombatService(ICampaignStore campaigns, ICombatStore store, 
             throw new RuleViolation("Spell is not known or prepared for this class.");
         if (request.Metamagic is not null && request.ClassId != "sorcerer")
             throw new RuleViolation("Metamagic requires a Sorcerer spell.");
+        if (request.Metamagic == MetamagicOption.HeightenedSpell &&
+            (spell.Effect != SpellEffectKind.SavingThrowDamage || request.MetamagicTargetId is not { } heightenedTarget ||
+             request.Targets is null || !request.Targets.Any(x => x.CombatantId == heightenedTarget)) ||
+            request.Metamagic != MetamagicOption.HeightenedSpell && request.MetamagicTargetId is not null)
+            throw new RuleViolation("Heightened Spell requires one selected saving throw target.");
+        if (request.Metamagic == MetamagicOption.DistantSpell && spell.Range.StartsWith("Self",StringComparison.Ordinal))
+            throw new RuleViolation("Distant Spell requires a spell with a non-Self range.");
         var castState = request.Metamagic is { } option ? SorceryPoints.Spend(state,option) : state;
         var subtle = request.Metamagic == MetamagicOption.SubtleSpell;
         if (!subtle && (spell.Components.Contains('V') && !request.VerbalAvailable ||
             spell.Components.Contains('S') && !request.SomaticAvailable) ||
             spell.Components.Contains('M') && (spell.MaterialCostGp > 0 || !subtle) && !request.MaterialAvailable)
             throw new RuleViolation("Required spell components are unavailable.");
+        if (spell.MaterialItemId is { } materialId && !state.Inventory.Any(x => x.DefinitionId == materialId))
+            throw new RuleViolation("The priced spell component is not in the caster's inventory.");
         if (profile.State.Capabilities.UntrainedArmorPenalty)
             throw new RuleViolation("Untrained armor prevents spellcasting.");
         var casting = SpellSlotCalculator.Derive(caster,state)?.Classes.SingleOrDefault(x => x.ClassId == request.ClassId)
@@ -155,7 +164,15 @@ public sealed class CombatService(ICampaignStore campaigns, ICombatStore store, 
             quickened ? "Bonus Action" : spell.CastingTime,spell.Level > 0 && !arcanumKnown,quickened);
         var targets = new SpellCombatResolver(dice).Resolve(s.Encounter,actor.Id,caster,profile,
             s.Characters,s.Profiles,spell,casting,request.Targets,request.SpellLevel,
-            request.AreaCenterDistanceFeet);
+            request.AreaCenterDistanceFeet,request.Metamagic == MetamagicOption.DistantSpell,
+            request.MetamagicTargetId);
+        AttackPenaltyEffect[] appliedPenalties = [];
+        if (spell.Id == "vicious-mockery" && targets[0].HitOrFailedSave)
+        {
+            var penalty = s.Encounter.State.AttackPenalties!.Last();
+            appliedPenalties = [penalty];
+            Emit(s,"AttackPenaltyApplied",penalty,penalty.TargetCombatantId);
+        }
         ActiveSpellEffect? activeEffect = null;
         if (spell.ConcentrationTurns > 0)
         {
@@ -174,7 +191,44 @@ public sealed class CombatService(ICampaignStore campaigns, ICombatStore store, 
         return await Save(s,"CombatSpellCast",new CombatSpellResolution(request.ClassId,spell.Id,
             request.SpellLevel,request.Pool,slotBefore,resources,targets,activeEffect,
             request.Metamagic,request.Metamagic is null ? null : SorceryPoints.Remaining(castState),
-            arcanumKnown),ct,actor.Id);
+            arcanumKnown,appliedPenalties),ct,actor.Id);
+    }
+
+    public async Task<CombatCommandResult<FontOfMagicResult>> ConvertSpellSlotAsync(Guid id,
+        CombatConvertSpellSlot request,CancellationToken ct = default)
+    {
+        if (progressions is null) throw new RuleViolation("Font of Magic is not installed.");
+        var s = await Load(id,ct);
+        if (s.Encounter.State.Revision != request.ExpectedRevision)
+            throw new StateConflictException("Encounter revision changed. Reload before converting a slot.");
+        var actor = s.Encounter.RequireTurn(request.CombatantId);
+        Effects(s,actor.Id).RequireAction();
+        var caster = s.Characters[actor.CharacterId];
+        var state = await progressions.GetAsync(caster.Id,ct)
+            ?? throw new RuleViolation("Caster has no progression state.");
+        var updated = SorceryPoints.ConvertSlot(caster,state,request.Pool,request.SpellLevel);
+        s.ProgressionUpdates.Add(caster.Id,updated);
+        return await Save(s,"SpellSlotConverted",new FontOfMagicResult(actor.Id,
+            SorceryPoints.Remaining(updated),SpellSlotCalculator.Derive(caster,updated)!,
+            s.Encounter.Combatant(actor.Id).Resources),ct,actor.Id);
+    }
+
+    public async Task<CombatCommandResult<FontOfMagicResult>> CreateSorcerySlotAsync(Guid id,
+        CombatCreateSorcerySlot request,CancellationToken ct = default)
+    {
+        if (progressions is null) throw new RuleViolation("Font of Magic is not installed.");
+        var s = await Load(id,ct);
+        if (s.Encounter.State.Revision != request.ExpectedRevision)
+            throw new StateConflictException("Encounter revision changed. Reload before creating a slot.");
+        var actor = s.Encounter.RequireTurn(request.CombatantId);
+        var caster = s.Characters[actor.CharacterId];
+        var state = await progressions.GetAsync(caster.Id,ct)
+            ?? throw new RuleViolation("Caster has no progression state.");
+        var updated = SorceryPoints.CreateSlot(state,request.SpellLevel);
+        var resources = s.Encounter.UseMagic(actor.Id,Effects(s,actor.Id),"Bonus Action",false);
+        s.ProgressionUpdates.Add(caster.Id,updated);
+        return await Save(s,"SorcerySlotCreated",new FontOfMagicResult(actor.Id,
+            SorceryPoints.Remaining(updated),SpellSlotCalculator.Derive(caster,updated)!,resources),ct,actor.Id);
     }
     public Task<CombatCommandResult<EncounterState>> EndTurnAsync(Guid id, CombatActor request, CancellationToken ct = default) =>
         Execute(id, "TurnAdvanced", s => {

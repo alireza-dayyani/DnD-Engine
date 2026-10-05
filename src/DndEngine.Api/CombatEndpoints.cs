@@ -22,6 +22,8 @@ internal static class CombatEndpoints
         app.MapPost("/combat/{id:guid}/action", (Guid id, TakeCombatAction r, CombatService s, CancellationToken ct) => s.ActionAsync(id, r, ct));
         app.MapPost("/combat/{id:guid}/attack", (Guid id, AttackCombatant r, CombatService s, CancellationToken ct) => s.AttackAsync(id, r, ct));
         app.MapPost("/combat/{id:guid}/spells/cast", (Guid id, CastCombatSpell r, CombatService s, CancellationToken ct) => s.CastSpellAsync(id, r, ct));
+        app.MapPost("/combat/{id:guid}/spell-slots/convert-to-points", (Guid id, CombatConvertSpellSlot r, CombatService s, CancellationToken ct) => s.ConvertSpellSlotAsync(id, r, ct));
+        app.MapPost("/combat/{id:guid}/spell-slots/create", (Guid id, CombatCreateSorcerySlot r, CombatService s, CancellationToken ct) => s.CreateSorcerySlotAsync(id, r, ct));
         app.MapPost("/combat/{id:guid}/saving-throws", (Guid id, CombatSavingThrow r, CombatService s, CancellationToken ct) => s.SavingThrowAsync(id, r, ct));
         app.MapPost("/combat/{id:guid}/conditions", (Guid id, ApplyCombatCondition r, CombatService s, CancellationToken ct) => s.ApplyConditionAsync(id, r, ct));
         app.MapDelete("/combat/{id:guid}/combatants/{combatantId:guid}/conditions/{conditionId:guid}",

@@ -7,13 +7,15 @@ namespace DndEngine.Domain.Combat;
 public sealed record SpellTargetContext(Guid CombatantId, int DistanceFeet, bool CasterCanSeeTarget,
     bool TargetCanSeeCaster = true, Cover Cover = Cover.None, bool IgnoreBlur = false,
     int? DistanceFromAreaCenterFeet = null, bool CloseRangedThreat = false,
-    Guid[]? VisibleFearSources = null);
+    Guid[]? VisibleFearSources = null, bool CasterCanHearTarget = false,
+    bool TargetLocationCorrect = true);
 public sealed record SpellTargetResult(Guid CombatantId, D20Roll? AttackRoll, D20Roll? SavingThrow,
     bool HitOrFailedSave, int[] DamageOrHealingRolls, DamageResolution? Damage, HealthChange? Health);
 public sealed record CombatSpellResolution(string ClassId, string SpellId, int SpellLevel,
     SpellSlotPoolKind? Pool, int? SlotBefore, TurnResources Resources, SpellTargetResult[] Targets,
     ActiveSpellEffect? ActiveEffect = null, MetamagicOption? Metamagic = null,
-    int? SorceryPointsAfter = null, bool MysticArcanumSpent = false);
+    int? SorceryPointsAfter = null, bool MysticArcanumSpent = false,
+    AttackPenaltyEffect[]? AppliedAttackPenalties = null);
 
 public sealed class SpellCombatResolver(IDiceRoller dice)
 {
@@ -21,12 +23,16 @@ public sealed class SpellCombatResolver(IDiceRoller dice)
         CombatProfile casterProfile, IReadOnlyDictionary<Guid, Character> characters,
         IReadOnlyDictionary<Guid, CombatProfile> profiles, SpellDefinition spell,
         ClassSpellcasting casting, SpellTargetContext[] targets, int spellLevel,
-        int? areaCenterDistanceFeet = null)
+        int? areaCenterDistanceFeet = null, bool distantSpell = false,
+        Guid? heightenedTargetId = null)
     {
         if (targets is null || targets.Length == 0 || targets.Length > 100 ||
-            targets.Select(x => x.CombatantId).Distinct().Count() != targets.Length)
-            throw new RuleViolation("Spell targets must be distinct and nonempty.");
-        if (spell.Damage?.Area != true && targets.Length != 1)
+            spell.Id != "eldritch-blast" && targets.Select(x => x.CombatantId).Distinct().Count() != targets.Length)
+            throw new RuleViolation("Spell targets must be distinct and nonempty, except Eldritch Blast beams.");
+        var beamCount = caster.Level.Value >= 17 ? 4 : caster.Level.Value >= 11 ? 3 : caster.Level.Value >= 5 ? 2 : 1;
+        if (spell.Id == "eldritch-blast" && targets.Length != beamCount)
+            throw new RuleViolation("Eldritch Blast requires one target per beam.");
+        if (spell.Damage?.Area != true && spell.Id != "eldritch-blast" && targets.Length != 1)
             throw new RuleViolation("This spell targets exactly one combatant.");
         var casterEffects = new ConditionEffects(caster,casterProfile);
         var maxDistance = spell.Range switch
@@ -34,13 +40,20 @@ public sealed class SpellCombatResolver(IDiceRoller dice)
             "Touch" => 5,
             "Self" => 0,
             "60 feet" => 60,
+            "30 feet" => 30,
             "120 feet" => 120,
             "150 feet" => 150,
             "Self (15-foot Cone)" => 15,
             _ => throw new RuleViolation("Spell range is not implemented in combat.")
         };
+        if (distantSpell)
+        {
+            if (spell.Range.StartsWith("Self",StringComparison.Ordinal))
+                throw new RuleViolation("Distant Spell cannot change a Self range.");
+            maxDistance = spell.Range == "Touch" ? 30 : checked(maxDistance*2);
+        }
         if (spell.Id == "circle-of-death" &&
-            (areaCenterDistanceFeet is null or < 0 or > 150 ||
+            (areaCenterDistanceFeet is null or < 0 || areaCenterDistanceFeet > maxDistance ||
              targets.Any(x => x.DistanceFromAreaCenterFeet is null or < 0 or > 60)))
             throw new RuleViolation("Circle of Death requires a point within 150 feet and targets within its 60-foot radius.");
         foreach (var target in targets)
@@ -54,7 +67,7 @@ public sealed class SpellCombatResolver(IDiceRoller dice)
                 spell.Id == "burning-hands" && target.CombatantId == casterId ||
                 spell.Range == "Self" && target.CombatantId != casterId ||
                 (spell.Id is "healing-word" or "sacred-flame" && !target.CasterCanSeeTarget) ||
-                (spell.Effect == SpellEffectKind.SpellAttack && !target.CasterCanSeeTarget))
+                spell.Id == "vicious-mockery" && !(target.CasterCanSeeTarget || target.CasterCanHearTarget))
                 throw new RuleViolation("Spell target is out of range, unseen, or behind total cover.");
             characters[member.CharacterId].Health.RequireAlive();
         }
@@ -66,6 +79,11 @@ public sealed class SpellCombatResolver(IDiceRoller dice)
             var character = characters[member.CharacterId];
             var profile = profiles[member.CharacterId];
             var targetEffects = new ConditionEffects(character,profile);
+            if (spell.Id == "eldritch-blast" && character.Health.State.Dead)
+            {
+                results.Add(new(member.Id,null,null,false,[],null,null));
+                continue;
+            }
             if (spell.Effect == SpellEffectKind.SelfHealing)
             {
                 var healingRoll = dice.Roll(new(spell.DicePerSlotLevel*spellLevel,spell.DieSides)).Rolls.ToArray();
@@ -88,14 +106,16 @@ public sealed class SpellCombatResolver(IDiceRoller dice)
                 attack = D20Roll.Make(dice,casting.SpellAttackBonus+casterEffects.D20Penalty,
                     targetEffects.AttacksAgainstHaveAdvantage || !target.TargetCanSeeCaster ||
                     targetEffects.Has(ConditionKind.Prone) && target.DistanceFeet <= 5,
-                    casterEffects.OwnAttacksHaveDisadvantage ||
+                    encounter.ConsumeNextAttackPenalty(casterId) || casterEffects.OwnAttacksHaveDisadvantage ||
+                    !target.CasterCanSeeTarget ||
                     encounter.HasSpellEffect(member.Id,"blur") && !target.IgnoreBlur ||
                     member.Resources.Dodging && targetEffects.CanAct && targetEffects.Speed > 0 && target.TargetCanSeeCaster ||
                     target.DistanceFeet <= 5 || target.CloseRangedThreat ||
                     targetEffects.Has(ConditionKind.Prone) && target.DistanceFeet > 5 ||
                     casterEffects.FearVisible(target.VisibleFearSources ?? []));
                 var ac = character.ArmorClass + (target.Cover == Cover.Half ? 2 : target.Cover == Cover.ThreeQuarters ? 5 : 0);
-                hit = attack.SelectedRoll != 1 && (attack.SelectedRoll == 20 || attack.Total >= ac);
+                hit = target.TargetLocationCorrect && attack.SelectedRoll != 1 &&
+                    (attack.SelectedRoll == 20 || attack.Total >= ac);
                 critical = hit && (attack.SelectedRoll == 20 ||
                     targetEffects.CriticalWithinFiveFeet && target.DistanceFeet <= 5);
             }
@@ -109,6 +129,7 @@ public sealed class SpellCombatResolver(IDiceRoller dice)
                         targetEffects.D20Penalty + (damage.IgnoreCover ? 0 : target.Cover == Cover.Half ? 2 : target.Cover == Cover.ThreeQuarters ? 5 : 0);
                     save = D20Roll.Make(dice,modifier,
                         ability == Ability.Dexterity && member.Resources.Dodging && targetEffects.CanAct && targetEffects.Speed > 0,
+                        target.CombatantId == heightenedTargetId ||
                         ability == Ability.Dexterity && targetEffects.Has(ConditionKind.Restrained));
                 }
                 hit = automaticFailure || save!.Total < casting.SpellSaveDc;
@@ -130,6 +151,8 @@ public sealed class SpellCombatResolver(IDiceRoller dice)
                 }
             }
             results.Add(new(member.Id,attack,save,hit,rolled,resolved,health));
+            if (spell.Id == "vicious-mockery" && hit)
+                encounter.ApplyNextAttackPenalty(member.Id,spell.Id);
         }
         return results.ToArray();
     }
@@ -137,7 +160,7 @@ public sealed class SpellCombatResolver(IDiceRoller dice)
     private int[] RollDamage(SpellDefinition spell,int slotLevel,int characterLevel,bool critical)
     {
         var damage = spell.Damage!;
-        var diceCount = spell.Level == 0
+        var diceCount = spell.Id == "eldritch-blast" ? 1 : spell.Level == 0
             ? damage.BaseDice * (characterLevel >= 17 ? 4 : characterLevel >= 11 ? 3 : characterLevel >= 5 ? 2 : 1)
             : damage.BaseDice + Math.Max(0,slotLevel-spell.Level)*damage.DicePerHigherSlot;
         return dice.Roll(new(diceCount*(critical ? 2 : 1),damage.DieSides)).Rolls.ToArray();

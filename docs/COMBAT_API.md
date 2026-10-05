@@ -19,6 +19,8 @@ Phase 1 campaign and sheet creation stay unchanged. All IDs are UUIDs; enum valu
 | POST | `/combat/{id}/action` | CombatantId, Action (Dash/Disengage/Dodge) |
 | POST | `/combat/{id}/attack` | CombatantId and nested Attack; example below |
 | POST | `/combat/{id}/spells/cast` | Encounter Magic action/Bonus Action; see [Magic API](MAGIC_API.md) |
+| POST | `/combat/{id}/spell-slots/convert-to-points` | Font of Magic conversion without an action |
+| POST | `/combat/{id}/spell-slots/create` | Font of Magic temporary slot creation using a Bonus Action |
 | POST | `/combat/{id}/saving-throws` | CombatantId and nested Check (Ability, Dc, optional advantage/disadvantage/modifier/voluntary failure) |
 | POST | `/combat/{id}/conditions` | CombatantId, Kind, Source, optional SourceCharacterId/Expiry/ExpiresOnTurn |
 | DELETE | `/combat/{id}/combatants/{combatantId}/conditions/{conditionId}` | Remove one source instance |

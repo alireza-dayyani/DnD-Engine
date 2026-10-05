@@ -199,12 +199,14 @@ public static class CharacterDeriver
             state.SpellPackVersion ?? SpellPackVersions.Initial,state.KnownCantrips ?? [],state.WizardSpellbookIds ?? [],
             state.MetamagicOptions ?? [],SorceryPoints.Remaining(state),SorceryPoints.Maximum(state),
             FeatureSpells.AlwaysPrepared(state),state.MysticArcanumChoices ?? [],
-            state.MysticArcanumSpentLevels ?? []);
+            state.MysticArcanumSpentLevels ?? [],state.ArcaneRecoveryUsed,
+            state.SorcerousRestorationUsed);
     }
 
     public static ItemDefinition FindItem(string id, CharacterRules rules, CombatContent combat) =>
         rules.Items.SingleOrDefault(x => x.Id == id) ??
         ((rules.ToolIds ?? []).Contains(id) ? new ItemDefinition(id,id,ItemKind.Gear) : null) ??
+        (id == "black-pearl-powder-500gp" ? new ItemDefinition(id,"Crushed black pearl powder (500+ GP)",ItemKind.Gear) : null) ??
         (combat.Weapons.Any(x => x.Id == id) ? new ItemDefinition(id,id,ItemKind.Weapon) : throw new RuleViolation("Unknown item definition."));
     public static bool WeaponProficient(string id, IReadOnlyList<Proficiency> proficiencies, CombatContent combat)
     {

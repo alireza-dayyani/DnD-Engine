@@ -317,6 +317,26 @@ public sealed class ProgressionService(ICampaignStore campaigns, IProgressionSto
             new { pool=request.Pool,spellLevel=request.SpellLevel,before,after=before-1 },ct);
     }
 
+    public async Task<CharacterSheet> ConvertSpellSlotAsync(Guid id,ConvertSpellSlot request,CancellationToken ct = default)
+    {
+        var (character,state,rules,combat) = await Load(id,ct);
+        await RequireMutable(character,request.ExpectedRevision,ct);
+        var before = SorceryPoints.Remaining(state);
+        var updated = SorceryPoints.ConvertSlot(character,state,request.Pool,request.SpellLevel);
+        return await Save(character,updated,rules,combat,"SpellSlotConverted",
+            new { request.Pool,request.SpellLevel,pointsBefore=before,pointsAfter=SorceryPoints.Remaining(updated) },ct);
+    }
+
+    public async Task<CharacterSheet> CreateSorcerySlotAsync(Guid id,CreateSorcerySlot request,CancellationToken ct = default)
+    {
+        var (character,state,rules,combat) = await Load(id,ct);
+        await RequireMutable(character,request.ExpectedRevision,ct);
+        var before = SorceryPoints.Remaining(state);
+        var updated = SorceryPoints.CreateSlot(state,request.SpellLevel);
+        return await Save(character,updated,rules,combat,"SorcerySlotCreated",
+            new { request.SpellLevel,pointsBefore=before,pointsAfter=SorceryPoints.Remaining(updated) },ct);
+    }
+
     public async Task<SpellCastResult> CastPreparedSpellAsync(Guid id, CastPreparedSpell request, CancellationToken ct = default)
     {
         var (character,state,rules,combat) = await Load(id,ct);
@@ -404,12 +424,43 @@ public sealed class ProgressionService(ICampaignStore campaigns, IProgressionSto
         }
         var resources = state.Resources.Select(x => x with { Current=x.Recovery switch {
             RecoveryKind.ShortRest => x.Maximum, RecoveryKind.OneOnShortRest => Math.Min(x.Maximum,x.Current+1), _ => x.Current } }).ToArray();
+        var recoveredLevels = request.ArcaneRecoverySlotLevels ?? [];
+        var wizardLevel = state.Classes.SingleOrDefault(x => x.ClassId == "wizard")?.Level ?? 0;
+        if (recoveredLevels.Length > 0 && (wizardLevel == 0 || state.ArcaneRecoveryUsed))
+            throw new RuleViolation("Arcane Recovery is unavailable until the next Long Rest.");
+        var slotUsage = recoveredLevels.Length == 0 ? state.SpellSlots :
+            SpellSlotCalculator.RecoverShared(character,state,recoveredLevels,(wizardLevel+1)/2);
+        Guard.Range(request.SorceryPointsToRestore,0,20,"Sorcery Points to restore");
+        var sorcererLevel = state.Classes.SingleOrDefault(x => x.ClassId == "sorcerer")?.Level ?? 0;
+        if (request.SorceryPointsToRestore > 0 && (sorcererLevel < 5 || state.SorcerousRestorationUsed ||
+            request.SorceryPointsToRestore > sorcererLevel/2 ||
+            request.SorceryPointsToRestore > state.SorceryPointsSpent))
+            throw new RuleViolation("Sorcerous Restoration is unavailable or exceeds its allowance.");
+        var prepared = state.PreparedSpells ?? [];
+        if (request.MemorizeSpell is { } replacement)
+        {
+            if (wizardLevel < 5 || replacement.ClassId != "wizard")
+                throw new RuleViolation("Memorize Spell requires Wizard level 5.");
+            prepared = await ReplaceSpellsAsync(character,state,state.Classes,[replacement],
+                SpellPreparationMoment.LongRest,null,ct);
+        }
         var updated = state with { HitDice=pools, Resources=resources,
-            SpellSlots=state.SpellSlots is null ? null : state.SpellSlots with { PactSpent=0 } };
+            SpellSlots=slotUsage is null ? null : slotUsage with { PactSpent=0 },
+            ArcaneRecoveryUsed=state.ArcaneRecoveryUsed || recoveredLevels.Length > 0,
+            SorceryPointsSpent=state.SorceryPointsSpent-request.SorceryPointsToRestore,
+            SorcerousRestorationUsed=state.SorcerousRestorationUsed || request.SorceryPointsToRestore > 0,
+            PreparedSpells=prepared };
         var sheet = await Save(character,updated,rules,combat,"RestCompleted",new { kind="Short",rolls,
-            hpRegained=character.Health.State.Current-before,pactSlotsRestored=state.SpellSlots?.PactSpent ?? 0 },ct);
-        return new(sheet,rolls.ToArray(),character.Health.State.Current-before,resources.Where((x,i) => x.Current != state.Resources[i].Current).ToArray(),
-            state.SpellSlots?.PactSpent > 0 ? ["Pact Magic slots restored"] : []);
+            hpRegained=character.Health.State.Current-before,pactSlotsRestored=state.SpellSlots?.PactSpent ?? 0,
+            arcaneRecoverySlotLevels=recoveredLevels,sorceryPointsRestored=request.SorceryPointsToRestore,
+            memorizeSpell=request.MemorizeSpell },ct);
+        var changes = new List<string>();
+        if (state.SpellSlots?.PactSpent > 0) changes.Add("Pact Magic slots restored");
+        if (recoveredLevels.Length > 0) changes.Add("Arcane Recovery slots restored");
+        if (request.SorceryPointsToRestore > 0) changes.Add("Sorcery Points restored");
+        if (request.MemorizeSpell is not null) changes.Add("Wizard spell memorized");
+        return new(sheet,rolls.ToArray(),character.Health.State.Current-before,
+            resources.Where((x,i) => x.Current != state.Resources[i].Current).ToArray(),changes.ToArray());
     }
     public async Task<RestResult> LongRestAsync(Guid id, LongRestRequest request, CancellationToken ct = default)
     {
@@ -439,7 +490,7 @@ public sealed class ProgressionService(ICampaignStore campaigns, IProgressionSto
             Resources=state.Resources.Select(x => x with { Current=x.Maximum }).ToArray(), LastLongRestAtUtc=now,
             MasteredWeaponIds=request.MasteredWeaponIds ?? state.MasteredWeaponIds, SpellSlots=null,
             PreparedSpells=prepared,KnownCantrips=cantrips,SorceryPointsSpent=0,
-            MysticArcanumSpentLevels=[] };
+            MysticArcanumSpentLevels=[],ArcaneRecoveryUsed=false,SorcerousRestorationUsed=false };
         var nextCharacter = Materialize(character.Id,character.CampaignId,character.Name,updated,rules,combat,health,character.Revision);
         var sheet = CharacterDeriver.Derive(nextCharacter,updated,rules,combat);
         var oldProfile = await combatStore.GetProfileAsync(id,ct);

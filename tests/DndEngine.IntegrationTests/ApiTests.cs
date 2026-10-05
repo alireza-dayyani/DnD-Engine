@@ -84,8 +84,16 @@ public class ApiTests
     {
         await using var app=new Factory(3,4); using var client=app.CreateClient();
         var spells=await client.GetFromJsonAsync<JsonElement>("/spells");
+        Assert.Equal(10,spells.GetArrayLength());
         Assert.Equal("cure-wounds",spells[0].GetProperty("id").GetString());
         Assert.Equal("healing-word",spells[1].GetProperty("id").GetString());
+        var third=await client.GetFromJsonAsync<JsonElement>("/spells?packVersion=3");
+        Assert.Equal(7,third.GetArrayLength());
+        Assert.False(third.EnumerateArray().Single(x=>x.GetProperty("id").GetString()=="circle-of-death")
+            .TryGetProperty("materialItemId",out _));
+        Assert.Equal("black-pearl-powder-500gp",spells.EnumerateArray()
+            .Single(x=>x.GetProperty("id").GetString()=="circle-of-death")
+            .GetProperty("materialItemId").GetString());
         var initialSpells=await client.GetFromJsonAsync<JsonElement>("/spells?packVersion=1");
         Assert.Single(initialSpells.EnumerateArray());
         Assert.Equal(8,initialSpells[0].GetProperty("dieSides").GetInt32());

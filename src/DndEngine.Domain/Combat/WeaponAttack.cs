@@ -74,7 +74,7 @@ public sealed class WeaponAttackResolver(IDiceRoller dice)
                     LoadingWeaponsUsed = weapon.Has(WeaponProperty.Loading) ? [.. resources.LoadingWeaponsUsed ?? [], instance.Id] : resources.LoadingWeaponsUsed };
             }
         }
-        var disadvantage = options.Disadvantage || attackerProfile.State.Capabilities.UntrainedArmorPenalty ||
+        var disadvantage = encounter.ConsumeNextAttackPenalty(attackerId) || options.Disadvantage || attackerProfile.State.Capabilities.UntrainedArmorPenalty ||
             own.OwnAttacksHaveDisadvantage || own.FearVisible(context.VisibleFearSources ?? []) ||
             own.GrappleDisadvantage(target.Id) || !context.AttackerCanSeeTarget ||
             other.Has(ConditionKind.Prone) && context.DistanceFeet > 5 ||

@@ -62,8 +62,8 @@ public sealed class SpellCatalog(RulesDbContext db) : ISpellCatalog
             new("healing-word","Healing Word",1,["bard","cleric","druid"],
                 "Bonus Action","60 feet","V",SpellEffectKind.SelfHealing,"SRD 5.2.1 p. 139",2,4)
         ];
-        await ImportPackAsync(db,SpellPackVersions.Previous,previous,ct);
-        SpellDefinition[] current = [..previous,
+        await ImportPackAsync(db,SpellPackVersions.Second,previous,ct);
+        SpellDefinition[] third = [..previous,
             new("fire-bolt","Fire Bolt",0,["sorcerer","wizard"],"Action","120 feet","V,S",
                 SpellEffectKind.SpellAttack,"SRD 5.2.1 p. 131",Damage:new(DamageType.Fire,1,10)),
             new("sacred-flame","Sacred Flame",0,["cleric"],"Action","60 feet","V,S",
@@ -78,6 +78,19 @@ public sealed class SpellCatalog(RulesDbContext db) : ISpellCatalog
                 "150 feet","V,S,M",SpellEffectKind.SavingThrowDamage,"SRD 5.2.1 p. 115",
                 Damage:new(DamageType.Necrotic,8,8,Ability.Constitution,2,HalfOnSave:true,Area:true),
                 MaterialCostGp:500)
+        ];
+        await ImportPackAsync(db,SpellPackVersions.Previous,third,ct);
+        SpellDefinition[] current = [..third.Select(x => x.Id == "circle-of-death"
+            ? x with { MaterialItemId="black-pearl-powder-500gp" } : x),
+            new("poison-spray","Poison Spray",0,["druid","sorcerer","warlock","wizard"],
+                "Action","30 feet","V,S",SpellEffectKind.SpellAttack,"SRD 5.2.1 p. 153",
+                Damage:new(DamageType.Poison,1,12)),
+            new("eldritch-blast","Eldritch Blast",0,["warlock"],
+                "Action","120 feet","V,S",SpellEffectKind.SpellAttack,"SRD 5.2.1 p. 127",
+                Damage:new(DamageType.Force,1,10)),
+            new("vicious-mockery","Vicious Mockery",0,["bard"],
+                "Action","60 feet","V",SpellEffectKind.SavingThrowDamage,"SRD 5.2.1 p. 172",
+                Damage:new(DamageType.Psychic,1,6,Ability.Wisdom))
         ];
         await ImportPackAsync(db,SpellPackVersions.Current,current,ct);
     }

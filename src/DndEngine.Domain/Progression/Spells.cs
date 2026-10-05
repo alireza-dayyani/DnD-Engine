@@ -8,8 +8,9 @@ public enum SpellEffectKind { SelfHealing, SpellAttack, SavingThrowDamage, Blur 
 public static class SpellPackVersions
 {
     public const string Initial = "1";
-    public const string Previous = "2";
-    public const string Current = "3";
+    public const string Second = "2";
+    public const string Previous = "3";
+    public const string Current = "4";
 }
 
 public sealed record SpellDefinition(string Id, string Name, int Level, string[] ClassIds,
@@ -17,7 +18,8 @@ public sealed record SpellDefinition(string Id, string Name, int Level, string[]
     int DicePerSlotLevel = 0, int DieSides = 0,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SpellDamage? Damage = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] int ConcentrationTurns = 0,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] int MaterialCostGp = 0);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] int MaterialCostGp = 0,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? MaterialItemId = null);
 
 public sealed record SpellDamage(DamageType Type, int BaseDice, int DieSides, Ability? SaveAbility = null,
     int DicePerHigherSlot = 0, bool HalfOnSave = false, bool IgnoreCover = false, bool Area = false);
@@ -25,10 +27,12 @@ public sealed record SpellDamage(DamageType Type, int BaseDice, int DieSides, Ab
 public sealed record PreparedSpell(string ClassId, string SpellId);
 
 public sealed record KnownCantrip(string ClassId, string SpellId);
-public enum MetamagicOption { QuickenedSpell, SubtleSpell }
+public enum MetamagicOption { QuickenedSpell, SubtleSpell, DistantSpell, HeightenedSpell }
 
 public static class SorceryPoints
 {
+    private static readonly int[] SlotCosts = [2,3,5,6,7];
+    private static readonly int[] MinimumLevels = [2,3,5,7,9];
     public static int Maximum(ProgressionState state) =>
         state.Classes.SingleOrDefault(x => x.ClassId == "sorcerer") is { Level: >= 2 } sorcerer
             ? sorcerer.Level : 0;
@@ -44,9 +48,31 @@ public static class SorceryPoints
         Guard.Defined(option);
         if (!(state.MetamagicOptions ?? []).Contains(option))
             throw new RuleViolation("Metamagic option is not known.");
-        var cost = option == MetamagicOption.QuickenedSpell ? 2 : 1;
+        var cost = option is MetamagicOption.QuickenedSpell or MetamagicOption.HeightenedSpell ? 2 : 1;
         if (Remaining(state) < cost) throw new RuleViolation("Insufficient Sorcery Points.");
         return state with { SorceryPointsSpent=state.SorceryPointsSpent+cost };
+    }
+
+    public static ProgressionState ConvertSlot(Character character,ProgressionState state,
+        SpellSlotPoolKind pool,int spellLevel)
+    {
+        if (Maximum(state) == 0) throw new RuleViolation("Font of Magic requires Sorcerer level 2.");
+        if (Remaining(state)+spellLevel > Maximum(state))
+            throw new RuleViolation("Converting this slot would exceed maximum Sorcery Points.");
+        var (usage,_) = SpellSlotCalculator.Spend(character,state,pool,spellLevel);
+        return state with { SpellSlots=usage,SorceryPointsSpent=state.SorceryPointsSpent-spellLevel };
+    }
+
+    public static ProgressionState CreateSlot(ProgressionState state,int spellLevel)
+    {
+        Guard.Range(spellLevel,1,5,"Created slot level");
+        var sorcererLevel = state.Classes.SingleOrDefault(x => x.ClassId == "sorcerer")?.Level ?? 0;
+        if (sorcererLevel < MinimumLevels[spellLevel-1])
+            throw new RuleViolation("Sorcerer level is too low to create this slot.");
+        var cost = SlotCosts[spellLevel-1];
+        if (Remaining(state) < cost) throw new RuleViolation("Insufficient Sorcery Points.");
+        return state with { SorceryPointsSpent=state.SorceryPointsSpent+cost,
+            SpellSlots=SpellSlotCalculator.CreateShared(state,spellLevel) };
     }
 }
 
@@ -54,7 +80,7 @@ public static class FeatureSpells
 {
     public static PreparedSpell[] AlwaysPrepared(ProgressionState state)
     {
-        if (state.SpellPackVersion != SpellPackVersions.Current) return [];
+        if (state.SpellPackVersion is not (SpellPackVersions.Previous or SpellPackVersions.Current)) return [];
         var warlock = state.Classes.SingleOrDefault(x => x.ClassId == "warlock");
         return warlock is { Level: >= 3 } &&
             (state.SubclassIds ?? []).GetValueOrDefault("warlock") == "fiend-patron"

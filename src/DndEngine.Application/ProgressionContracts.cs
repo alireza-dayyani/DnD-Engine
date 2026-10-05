@@ -19,12 +19,16 @@ public sealed record LevelUpCharacter(string ClassId, long ExpectedRevision, str
     MetamagicOption[]? AdditionalMetamagicOptions = null, string? MysticArcanumSpellId = null);
 public sealed record ItemChange(string DefinitionId, long ExpectedRevision);
 public sealed record EquipItem(Guid ItemId, long ExpectedRevision);
-public sealed record ShortRestRequest(int[] HitDieSides, long ExpectedRevision);
+public sealed record ShortRestRequest(int[] HitDieSides, long ExpectedRevision,
+    int[]? ArcaneRecoverySlotLevels = null, int SorceryPointsToRestore = 0,
+    SpellReplacement? MemorizeSpell = null);
 public sealed record LongRestRequest(long ExpectedRevision, string[]? MasteredWeaponIds = null,
     SpellReplacement[]? SpellReplacements = null, SpellReplacement? CantripReplacement = null);
 public sealed record AdoptSpellPack(string PackVersion, long ExpectedRevision, KnownCantrip[]? KnownCantrips = null);
 public sealed record SpendResource(string ResourceId, int Amount, long ExpectedRevision);
 public sealed record SpendSpellSlot(SpellSlotPoolKind Pool, int SpellLevel, long ExpectedRevision);
+public sealed record ConvertSpellSlot(SpellSlotPoolKind Pool, int SpellLevel, long ExpectedRevision);
+public sealed record CreateSorcerySlot(int SpellLevel, long ExpectedRevision);
 public sealed record CastPreparedSpell(string ClassId, string SpellId, SpellSlotPoolKind Pool, int SpellLevel,
     long ExpectedRevision, bool ComponentsAvailable);
 public sealed record SpellCastResult(CharacterSheet Sheet, string ClassId, string SpellId, SpellSlotPoolKind Pool,

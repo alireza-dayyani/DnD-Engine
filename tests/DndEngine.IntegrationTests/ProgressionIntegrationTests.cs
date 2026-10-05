@@ -23,6 +23,121 @@ public sealed class ProgressionIntegrationTests
         StartingItemIds:["chain-mail","greatsword"],MasteredWeaponIds:["greatsword"],FightingStyleFeat:"defense");
 
     [Fact]
+    public async Task FontOfMagicCreatedSlotAndConversionSurviveRestartThenExpireAtLongRest()
+    {
+        var path=Path.Combine(Path.GetTempPath(),"DndEngine.FontTests",Guid.NewGuid().ToString("N"));
+        Guid id;
+        await using(var provider=Provider(path))
+        {
+            await provider.InitializeDndEngineAsync();
+            await using var scope=provider.CreateAsyncScope(); var services=scope.ServiceProvider;
+            var campaign=await services.GetRequiredService<CampaignService>().CreateAsync(new("Font"));
+            var service=services.GetRequiredService<ProgressionService>();
+            var sheet=await service.CreateAsync(new(campaign.Id,"Nira","dwarf",null,"Medium","criminal",
+                "sorcerer",Enum.GetValues<Ability>().ToDictionary(x=>x,_=>13),
+                new() { [Ability.Dexterity]=2,[Ability.Constitution]=1 },["arcana","persuasion"]));
+            sheet=await service.LevelUpAsync(sheet.Id,new("sorcerer",sheet.Revision)); id=sheet.Id;
+            Assert.Equal(2,sheet.SorceryPointsCurrent);
+            await Assert.ThrowsAsync<RuleViolation>(()=>service.CreateSorcerySlotAsync(id,new(2,sheet.Revision)));
+            sheet=await service.CreateSorcerySlotAsync(id,new(1,sheet.Revision));
+            Assert.Equal(4,sheet.Spellcasting!.SharedSlots.Single().Current);
+            Assert.Equal(0,sheet.SorceryPointsCurrent);
+            sheet=await service.SpendSpellSlotAsync(id,new(SpellSlotPoolKind.Shared,1,sheet.Revision));
+            Assert.Equal(3,sheet.Spellcasting!.SharedSlots.Single().Current);
+            sheet=await service.ConvertSpellSlotAsync(id,new(SpellSlotPoolKind.Shared,1,sheet.Revision));
+            Assert.Equal(1,sheet.SorceryPointsCurrent);
+        }
+        await using(var provider=Provider(path))
+        {
+            await provider.InitializeDndEngineAsync();
+            await using var scope=provider.CreateAsyncScope(); var services=scope.ServiceProvider;
+            var service=services.GetRequiredService<ProgressionService>();
+            var sheet=await service.SheetAsync(id);
+            Assert.Equal(1,sheet.SorceryPointsCurrent);
+            Assert.Equal(2,sheet.Spellcasting!.SharedSlots.Single().Current);
+            sheet=await service.ConvertSpellSlotAsync(id,new(SpellSlotPoolKind.Shared,1,sheet.Revision));
+            Assert.Equal(2,sheet.SorceryPointsCurrent);
+            await Assert.ThrowsAsync<RuleViolation>(()=>service.ConvertSpellSlotAsync(id,
+                new(SpellSlotPoolKind.Shared,1,sheet.Revision)));
+            var rested=await service.LongRestAsync(id,new(sheet.Revision));
+            Assert.Equal(3,rested.Sheet.Spellcasting!.SharedSlots.Single().Current);
+            Assert.Equal(2,rested.Sheet.SorceryPointsCurrent);
+            var events=await services.GetRequiredService<CampaignService>().EventsAsync(rested.Sheet.CampaignId);
+            Assert.Contains(events,x=>x.Type=="SorcerySlotCreated");
+            Assert.Equal(2,events.Count(x=>x.Type=="SpellSlotConverted"));
+        }
+    }
+
+    [Fact]
+    public async Task ArcaneRecoveryUsesOnlyExpendedSharedSlotsOncePerLongRest()
+    {
+        var path=Path.Combine(Path.GetTempPath(),"DndEngine.ArcaneRecoveryTests",Guid.NewGuid().ToString("N"));
+        await using var provider=Provider(path);
+        await provider.InitializeDndEngineAsync();
+        await using var scope=provider.CreateAsyncScope(); var services=scope.ServiceProvider;
+        var campaign=await services.GetRequiredService<CampaignService>().CreateAsync(new("Recovery"));
+        var service=services.GetRequiredService<ProgressionService>();
+        var sheet=await service.CreateAsync(new(campaign.Id,"Ilyra","dwarf",null,"Medium","criminal",
+            "wizard",Enum.GetValues<Ability>().ToDictionary(x=>x,_=>13),
+            new() { [Ability.Dexterity]=2,[Ability.Constitution]=1 },["arcana","history"]));
+        sheet=await service.SpendSpellSlotAsync(sheet.Id,new(SpellSlotPoolKind.Shared,1,sheet.Revision));
+        await Assert.ThrowsAsync<RuleViolation>(()=>service.ShortRestAsync(sheet.Id,
+            new([],sheet.Revision,ArcaneRecoverySlotLevels:[2])));
+        var rested=await service.ShortRestAsync(sheet.Id,new([],sheet.Revision,ArcaneRecoverySlotLevels:[1]));
+        Assert.True(rested.Sheet.ArcaneRecoveryUsed);
+        Assert.Equal(2,rested.Sheet.Spellcasting!.SharedSlots.Single().Current);
+        sheet=await service.SpendSpellSlotAsync(sheet.Id,new(SpellSlotPoolKind.Shared,1,rested.Sheet.Revision));
+        await Assert.ThrowsAsync<RuleViolation>(()=>service.ShortRestAsync(sheet.Id,
+            new([],sheet.Revision,ArcaneRecoverySlotLevels:[1])));
+        var longRest=await service.LongRestAsync(sheet.Id,new(sheet.Revision));
+        Assert.False(longRest.Sheet.ArcaneRecoveryUsed);
+    }
+
+    [Fact]
+    public async Task ShortRestMemorizesOneWizardSpellAndRestoresSorceryPointsOnce()
+    {
+        var path=Path.Combine(Path.GetTempPath(),"DndEngine.ShortRestMagicTests",Guid.NewGuid().ToString("N"));
+        await using var provider=Provider(path);
+        await provider.InitializeDndEngineAsync();
+        await using var scope=provider.CreateAsyncScope(); var services=scope.ServiceProvider;
+        var campaign=await services.GetRequiredService<CampaignService>().CreateAsync(new("Short rest magic"));
+        var service=services.GetRequiredService<ProgressionService>();
+        var wizard=await service.CreateAsync(new(campaign.Id,"Ilyra","dwarf",null,"Medium","criminal",
+            "wizard",Enum.GetValues<Ability>().ToDictionary(x=>x,_=>13),
+            new() { [Ability.Dexterity]=2,[Ability.Constitution]=1 },["arcana","history"],
+            PreparedSpellIds:["burning-hands"],WizardSpellbookIds:["burning-hands"]));
+        wizard=await service.LevelUpAsync(wizard.Id,new("wizard",wizard.Revision));
+        wizard=await service.LevelUpAsync(wizard.Id,new("wizard",wizard.Revision,
+            SubclassId:"school-of-evocation",AdditionalWizardSpellbookIds:["blur"]));
+        wizard=await service.LevelUpAsync(wizard.Id,new("wizard",wizard.Revision,
+            FeatId:"ability-score-improvement",AbilityIncreases:new() { [Ability.Intelligence]=2 }));
+        wizard=await service.LevelUpAsync(wizard.Id,new("wizard",wizard.Revision));
+        var prepared=await service.ShortRestAsync(wizard.Id,new([],wizard.Revision,
+            MemorizeSpell:new("wizard","burning-hands","blur")));
+        Assert.Contains(prepared.Sheet.PreparedSpells!,x=>x.SpellId=="blur" && x.ClassId=="wizard");
+        Assert.DoesNotContain(prepared.Sheet.PreparedSpells!,x=>x.SpellId=="burning-hands");
+
+        var sorcerer=await service.CreateAsync(new(campaign.Id,"Nira","dwarf",null,"Medium","criminal",
+            "sorcerer",Enum.GetValues<Ability>().ToDictionary(x=>x,_=>13),
+            new() { [Ability.Dexterity]=2,[Ability.Constitution]=1 },["arcana","persuasion"]));
+        sorcerer=await service.LevelUpAsync(sorcerer.Id,new("sorcerer",sorcerer.Revision));
+        sorcerer=await service.LevelUpAsync(sorcerer.Id,new("sorcerer",sorcerer.Revision,
+            SubclassId:"draconic-sorcery"));
+        sorcerer=await service.LevelUpAsync(sorcerer.Id,new("sorcerer",sorcerer.Revision,
+            FeatId:"ability-score-improvement",AbilityIncreases:new() { [Ability.Charisma]=2 }));
+        sorcerer=await service.LevelUpAsync(sorcerer.Id,new("sorcerer",sorcerer.Revision));
+        sorcerer=await service.CreateSorcerySlotAsync(sorcerer.Id,new(1,sorcerer.Revision));
+        sorcerer=await service.CreateSorcerySlotAsync(sorcerer.Id,new(1,sorcerer.Revision));
+        Assert.Equal(1,sorcerer.SorceryPointsCurrent);
+        var restored=await service.ShortRestAsync(sorcerer.Id,new([],sorcerer.Revision,
+            SorceryPointsToRestore:2));
+        Assert.Equal(3,restored.Sheet.SorceryPointsCurrent);
+        Assert.True(restored.Sheet.SorcerousRestorationUsed);
+        await Assert.ThrowsAsync<RuleViolation>(()=>service.ShortRestAsync(sorcerer.Id,
+            new([],restored.Sheet.Revision,SorceryPointsToRestore:1)));
+    }
+
+    [Fact]
     public async Task MulticlassSpellSlotsPersistAndRecoverOnTheirOwnRestIntervals()
     {
         var path=Path.Combine(Path.GetTempPath(),"DndEngine.SpellSlotTests",Guid.NewGuid().ToString("N"));
@@ -116,7 +231,7 @@ public sealed class ProgressionIntegrationTests
             Assert.Contains(sheet.PreparedSpells!,x=>x.SpellId=="cure-wounds");
             var events=await services.GetRequiredService<CampaignService>().EventsAsync(sheet.CampaignId);
             Assert.Contains(events,x=>x.Type=="SpellCast");
-            Assert.Equal(7,(await service.SpellChoicesAsync()).Length);
+            Assert.Equal(10,(await service.SpellChoicesAsync()).Length);
         }
     }
 
@@ -153,7 +268,8 @@ public sealed class ProgressionIntegrationTests
             Assert.Equal(SpellPackVersions.Initial,sheet.SpellPackVersion);
             var catalog=services.GetRequiredService<ISpellCatalog>();
             Assert.Single(await catalog.GetAsync(Ruleset.Current,SpellPackVersions.Initial,default));
-            Assert.Equal(7,(await catalog.GetAsync(Ruleset.Current,SpellPackVersions.Current,default)).Length);
+            Assert.Equal(7,(await catalog.GetAsync(Ruleset.Current,SpellPackVersions.Previous,default)).Length);
+            Assert.Equal(10,(await catalog.GetAsync(Ruleset.Current,SpellPackVersions.Current,default)).Length);
             await services.GetRequiredService<MechanicsService>().DamageAsync(id,new(6));
             sheet=await service.SheetAsync(id);
             var cast=await service.CastPreparedSpellAsync(id,
@@ -174,6 +290,49 @@ public sealed class ProgressionIntegrationTests
             Assert.Equal(SpellPackVersions.Current,sheet.SpellPackVersion);
             Assert.Contains(sheet.KnownCantrips!,x=>x.SpellId=="sacred-flame");
             Assert.Contains(sheet.PreparedSpells!,x=>x.SpellId=="cure-wounds");
+        }
+    }
+
+    [Fact]
+    public async Task PackThreeWarlockAdoptsPackFourWithoutLosingFiendGrant()
+    {
+        var path=Path.Combine(Path.GetTempPath(),"DndEngine.PackFourAdoptionTests",Guid.NewGuid().ToString("N"));
+        Guid id;
+        await using(var provider=Provider(path))
+        {
+            await provider.InitializeDndEngineAsync();
+            await using var scope=provider.CreateAsyncScope(); var services=scope.ServiceProvider;
+            var campaign=await services.GetRequiredService<CampaignService>().CreateAsync(new("Pack adoption"));
+            var service=services.GetRequiredService<ProgressionService>();
+            var warlock=await service.CreateAsync(new(campaign.Id,"Thane","dwarf",null,"Medium",
+                "criminal","warlock",Enum.GetValues<Ability>().ToDictionary(x=>x,_=>13),
+                new() { [Ability.Dexterity]=2,[Ability.Constitution]=1 },["arcana","history"]));
+            warlock=await service.LevelUpAsync(warlock.Id,new("warlock",warlock.Revision));
+            warlock=await service.LevelUpAsync(warlock.Id,new("warlock",warlock.Revision,
+                SubclassId:"fiend-patron"));
+            id=warlock.Id;
+            var db=services.GetRequiredService<CampaignDbContext>();
+            var row=await db.Progressions.SingleAsync(x=>x.CharacterId==id);
+            var json=JsonNode.Parse(row.StateJson)!.AsObject();
+            json["spellPackVersion"]=SpellPackVersions.Previous;
+            row.StateJson=json.ToJsonString();
+            await db.SaveChangesAsync();
+        }
+        await using(var provider=Provider(path))
+        {
+            await provider.InitializeDndEngineAsync();
+            await using var scope=provider.CreateAsyncScope(); var services=scope.ServiceProvider;
+            var service=services.GetRequiredService<ProgressionService>();
+            var sheet=await service.SheetAsync(id);
+            Assert.Equal(SpellPackVersions.Previous,sheet.SpellPackVersion);
+            Assert.Contains(sheet.AlwaysPreparedSpells!,x=>x.SpellId=="burning-hands");
+            sheet=await service.AdoptSpellPackAsync(id,new(SpellPackVersions.Current,sheet.Revision,
+                [new("warlock","poison-spray"),new("warlock","eldritch-blast")]));
+            Assert.Equal(SpellPackVersions.Current,sheet.SpellPackVersion);
+            Assert.Equal(2,sheet.KnownCantrips!.Length);
+            Assert.Contains(sheet.AlwaysPreparedSpells!,x=>x.SpellId=="burning-hands");
+            var events=await services.GetRequiredService<CampaignService>().EventsAsync(sheet.CampaignId);
+            Assert.Contains(events,x=>x.Type=="SpellPackAdopted");
         }
     }
 
@@ -205,7 +364,7 @@ public sealed class ProgressionIntegrationTests
             await using var scope=provider.CreateAsyncScope();
             var rules=scope.ServiceProvider.GetRequiredService<RulesDbContext>();
             Assert.Equal(initialHash,(await rules.SpellContent.SingleAsync()).ContentHash);
-            Assert.Equal(2,(await rules.SpellPacks.ToArrayAsync()).Length);
+            Assert.Equal(3,(await rules.SpellPacks.ToArrayAsync()).Length);
             Assert.False(rules.Database.HasPendingModelChanges());
         }
     }

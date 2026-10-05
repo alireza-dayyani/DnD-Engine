@@ -18,12 +18,13 @@ public sealed record CombatantState(Guid Id, Guid CharacterId, CombatantKind Kin
     bool Surprised, string? InitiativeGroup, D20Roll? Initiative, TurnResources Resources);
 public sealed record EncounterState(Guid Id, Guid CampaignId, string Name, EncounterStatus Status,
     CombatantState[] Combatants, Guid[] Order, int Round, int TurnIndex, long TurnNumber, long Revision,
-    ActiveSpellEffect[]? ActiveSpells = null);
+    ActiveSpellEffect[]? ActiveSpells = null, AttackPenaltyEffect[]? AttackPenalties = null);
 public sealed record InitiativeTie(int Total, Guid[] Combatants, string DecidedBy);
 public sealed record InitiativeResult(CombatantState[] Combatants, InitiativeTie[] Ties);
 public sealed record MovementResult(Guid CombatantId, int Distance, MovementMode Mode, bool DifficultTerrain, int Cost, int Speed, int Used, int Remaining);
 public sealed record ActiveSpellEffect(Guid CasterCombatantId, Guid TargetCombatantId, string SpellId,
     long ExpiresOnTurn);
+public sealed record AttackPenaltyEffect(Guid TargetCombatantId, string SpellId, long ExpiresOnTurn);
 
 public sealed class CombatEncounter
 {
@@ -46,6 +47,9 @@ public sealed class CombatEncounter
             !state.Combatants.Any(c => c.Id == x.TargetCombatantId)) ||
             (state.ActiveSpells ?? []).GroupBy(x => x.CasterCombatantId).Any(x => x.Count() > 1))
             throw new RuleViolation("Invalid active spell effects.");
+        if ((state.AttackPenalties ?? []).Any(x => x.ExpiresOnTurn <= state.TurnNumber ||
+            !state.Combatants.Any(c => c.Id == x.TargetCombatantId)))
+            throw new RuleViolation("Invalid spell attack penalty.");
         State = state;
     }
     public static CombatEncounter Create(Guid campaignId, string name) => new(new(Guid.NewGuid(), campaignId, Guard.Name(name),
@@ -119,12 +123,13 @@ public sealed class CombatEncounter
         var index = (State.TurnIndex + 1) % State.Order.Length;
         State = State with { TurnIndex = index, Round = State.Round + (index == 0 ? 1 : 0), TurnNumber = checked(State.TurnNumber + 1) };
         State = State with { ActiveSpells = ActiveSpells.Where(x => x.ExpiresOnTurn > State.TurnNumber).ToArray() };
+        State = State with { AttackPenalties = (State.AttackPenalties ?? []).Where(x => x.ExpiresOnTurn > State.TurnNumber).ToArray() };
         ResetCurrentTurn();
     }
     private void ResetCurrentTurn() => SetResources(CurrentCombatantId!.Value, new());
     public void Complete()
     {
-        RequireActive(); State = State with { Status = EncounterStatus.Completed, ActiveSpells = [] };
+        RequireActive(); State = State with { Status = EncounterStatus.Completed, ActiveSpells = [], AttackPenalties = [] };
     }
     public void SetResources(Guid id, TurnResources resources) => State = State with {
         Combatants = State.Combatants.Select(x => x.Id == id ? x with { Resources = resources } : x).ToArray() };
@@ -200,4 +205,22 @@ public sealed class CombatEncounter
     }
     public bool HasSpellEffect(Guid target,string spellId) =>
         ActiveSpells.Any(x => x.TargetCombatantId == target && x.SpellId == spellId);
+
+    public void ApplyNextAttackPenalty(Guid target,string spellId)
+    {
+        RequireActive(); Combatant(target);
+        var index = Array.IndexOf(State.Order,target);
+        var offset = (index-State.TurnIndex+State.Order.Length)%State.Order.Length;
+        if (offset == 0) offset = State.Order.Length;
+        var expires = checked(State.TurnNumber+offset+1);
+        State = State with { AttackPenalties = [..State.AttackPenalties ?? [],new(target,spellId,expires)] };
+    }
+
+    public bool ConsumeNextAttackPenalty(Guid attacker)
+    {
+        var hasPenalty = (State.AttackPenalties ?? []).Any(x => x.TargetCombatantId == attacker);
+        if (hasPenalty)
+            State = State with { AttackPenalties = (State.AttackPenalties ?? []).Where(x => x.TargetCombatantId != attacker).ToArray() };
+        return hasPenalty;
+    }
 }
