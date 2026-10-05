@@ -53,6 +53,29 @@ public class ApiTests
         Assert.Equal(HttpStatusCode.BadRequest,(await client.PostAsJsonAsync($"/characters/{Guid.NewGuid()}/saving-throws",new{ability="Bogus",dc=10})).StatusCode);
         Assert.Equal(HttpStatusCode.BadRequest,(await client.PostAsJsonAsync($"/characters/{Guid.NewGuid()}/damage",new{})).StatusCode);
     }
+
+    [Fact]
+    public async Task HttpSpellSlotSpendingUpdatesTheSheetAndRejectsStaleWrites()
+    {
+        await using var app=new Factory(); using var client=app.CreateClient();
+        var campaign=await Post(client,"/campaigns",new { name="Magic API" });
+        var campaignId=campaign.GetProperty("id").GetGuid();
+        var sheet=await Post(client,"/srd-characters",new {
+            campaignId,name="Arin",speciesId="dwarf",speciesVariantId=(string?)null,size="Medium",backgroundId="criminal",classId="wizard",
+            baseAbilities=new { Strength=13,Dexterity=13,Constitution=13,Intelligence=13,Wisdom=13,Charisma=13 },
+            backgroundBonuses=new { Dexterity=2,Constitution=1 },classSkills=new[]{"arcana","history"}
+        });
+        var id=sheet.GetProperty("id").GetGuid();
+        var revision=sheet.GetProperty("revision").GetInt64();
+        sheet=await Post(client,$"/characters/{id}/spell-slots/spend",new { pool="Shared",spellLevel=1,expectedRevision=revision });
+        Assert.Equal(1,sheet.GetProperty("spellcasting").GetProperty("sharedSlots")[0].GetProperty("current").GetInt32());
+        Assert.Equal(HttpStatusCode.Conflict,(await client.PostAsJsonAsync($"/characters/{id}/spell-slots/spend",
+            new { pool="Shared",spellLevel=1,expectedRevision=revision })).StatusCode);
+        Assert.Equal(HttpStatusCode.BadRequest,(await client.PostAsJsonAsync($"/characters/{id}/spell-slots/spend",
+            new { pool="PactMagic",spellLevel=1,expectedRevision=revision+1 })).StatusCode);
+        var summary=await client.GetFromJsonAsync<JsonElement>($"/characters/{id}/spellcasting");
+        Assert.Equal(1,summary.GetProperty("sharedSlots")[0].GetProperty("current").GetInt32());
+    }
     private static async Task<JsonElement> Post(HttpClient client,string url,object body)
     {
         using var response=await client.PostAsJsonAsync(url,body);

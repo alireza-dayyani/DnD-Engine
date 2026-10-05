@@ -247,6 +247,38 @@ public sealed class ProgressionService(ICampaignStore campaigns, IProgressionSto
             new { resourceId=resource.Id, before=resource.Current, after=resource.Current-request.Amount },ct);
     }
 
+    public async Task<CharacterSheet> SpendSpellSlotAsync(Guid id, SpendSpellSlot request, CancellationToken ct = default)
+    {
+        var (character,state,rules,combat) = await Load(id,ct);
+        await RequireMutable(character,request.ExpectedRevision,ct);
+        Guard.Defined(request.Pool);
+        Guard.Range(request.SpellLevel,1,9,"Spell level");
+        var summary = SpellSlotCalculator.Derive(character,state) ?? throw new RuleViolation("Character has no spell slots.");
+        var shared = (int[])(state.SpellSlots?.SharedSpentByLevel.Clone() ?? new int[9]);
+        var pactSpent = state.SpellSlots?.PactSpent ?? 0;
+        int before;
+        if (request.Pool == SpellSlotPoolKind.Shared)
+        {
+            var pool = summary.SharedSlots.SingleOrDefault(x => x.SpellLevel == request.SpellLevel)
+                ?? throw new RuleViolation("Shared spell slot level is unavailable.");
+            before = pool.Current;
+            if (before == 0) throw new RuleViolation("No shared spell slot remains at that level.");
+            shared[request.SpellLevel-1]++;
+        }
+        else
+        {
+            var pool = summary.PactMagicSlots;
+            if (pool is null || pool.SpellLevel != request.SpellLevel)
+                throw new RuleViolation("Pact Magic slot level is unavailable.");
+            before = pool.Current;
+            if (before == 0) throw new RuleViolation("No Pact Magic slot remains.");
+            pactSpent++;
+        }
+        var updated = state with { SpellSlots = new(shared,pactSpent) };
+        return await Save(character,updated,rules,combat,"SpellSlotSpent",
+            new { pool=request.Pool,spellLevel=request.SpellLevel,before,after=before-1 },ct);
+    }
+
     public async Task<RestResult> ShortRestAsync(Guid id, ShortRestRequest request, CancellationToken ct = default)
     {
         var (character,state,rules,combat) = await Load(id,ct);
@@ -267,9 +299,12 @@ public sealed class ProgressionService(ICampaignStore campaigns, IProgressionSto
         }
         var resources = state.Resources.Select(x => x with { Current=x.Recovery switch {
             RecoveryKind.ShortRest => x.Maximum, RecoveryKind.OneOnShortRest => Math.Min(x.Maximum,x.Current+1), _ => x.Current } }).ToArray();
-        var updated = state with { HitDice=pools, Resources=resources };
-        var sheet = await Save(character,updated,rules,combat,"RestCompleted",new { kind="Short",rolls,hpRegained=character.Health.State.Current-before },ct);
-        return new(sheet,rolls.ToArray(),character.Health.State.Current-before,resources.Where((x,i) => x.Current != state.Resources[i].Current).ToArray(),[]);
+        var updated = state with { HitDice=pools, Resources=resources,
+            SpellSlots=state.SpellSlots is null ? null : state.SpellSlots with { PactSpent=0 } };
+        var sheet = await Save(character,updated,rules,combat,"RestCompleted",new { kind="Short",rolls,
+            hpRegained=character.Health.State.Current-before,pactSlotsRestored=state.SpellSlots?.PactSpent ?? 0 },ct);
+        return new(sheet,rolls.ToArray(),character.Health.State.Current-before,resources.Where((x,i) => x.Current != state.Resources[i].Current).ToArray(),
+            state.SpellSlots?.PactSpent > 0 ? ["Pact Magic slots restored"] : []);
     }
     public async Task<RestResult> LongRestAsync(Guid id, LongRestRequest request, CancellationToken ct = default)
     {
@@ -285,18 +320,23 @@ public sealed class ProgressionService(ICampaignStore campaigns, IProgressionSto
             DeathSuccesses=0,DeathFailures=0 });
         var updated = state with { HitDice=state.HitDice.Select(x => x with { Available=x.Total }).ToArray(),
             Resources=state.Resources.Select(x => x with { Current=x.Maximum }).ToArray(), LastLongRestAtUtc=now,
-            MasteredWeaponIds=request.MasteredWeaponIds ?? state.MasteredWeaponIds };
+            MasteredWeaponIds=request.MasteredWeaponIds ?? state.MasteredWeaponIds, SpellSlots=null };
         var nextCharacter = Materialize(character.Id,character.CampaignId,character.Name,updated,rules,combat,health,character.Revision);
         var sheet = CharacterDeriver.Derive(nextCharacter,updated,rules,combat);
         var oldProfile = await combatStore.GetProfileAsync(id,ct);
         var profile = Profile(id,sheet,combat,oldProfile);
         var exhaustion = profile.State.Conditions.FirstOrDefault(x => x.Kind == ConditionKind.Exhaustion);
         if (exhaustion is not null) profile.RemoveCondition(exhaustion.Id);
+        var sharedRestored = state.SpellSlots?.SharedSpentByLevel.Sum() ?? 0;
+        var pactRestored = state.SpellSlots?.PactSpent ?? 0;
         await progressions.SaveAsync(nextCharacter,updated,profile,Event(character,"RestCompleted",character.Revision+1,
-            new { kind="Long",hpRegained=health.State.Current-before,exhaustionReduced=exhaustion is not null }),ct);
+            new { kind="Long",hpRegained=health.State.Current-before,exhaustionReduced=exhaustion is not null,
+                sharedSlotsRestored=sharedRestored,pactSlotsRestored=pactRestored }),ct);
+        var changes = new List<string> { "Temporary HP expired" };
+        if (exhaustion is not null) changes.Add("Exhaustion reduced by one");
+        if (sharedRestored > 0 || pactRestored > 0) changes.Add("Spell slots restored");
         return new(sheet with { Revision=character.Revision+1 },[],health.State.Current-before,
-            updated.Resources.Where((x,i) => x.Current != state.Resources[i].Current).ToArray(),
-            exhaustion is null ? ["Temporary HP expired"] : ["Temporary HP expired","Exhaustion reduced by one"]);
+            updated.Resources.Where((x,i) => x.Current != state.Resources[i].Current).ToArray(),changes.ToArray());
     }
 
     private async Task<CharacterSheet> Save(Character character, ProgressionState state, CharacterRules rules, CombatContent combat,

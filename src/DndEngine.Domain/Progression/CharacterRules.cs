@@ -7,6 +7,7 @@ public enum EffectKind { Proficiency, SpeedBonus, HitPointsPerLevel, Resistance,
 public enum ItemKind { Weapon, Armor, Shield, Gear }
 public enum ArmorKind { Light, Medium, Heavy, Shield }
 public enum RecoveryKind { LongRest, ShortRest, OneOnShortRest }
+public enum SpellSlotPoolKind { Shared, PactMagic }
 public enum FeatKind { Origin, General, FightingStyle, EpicBoon }
 
 public sealed record FeatureEffect(EffectKind Kind, string Target = "", int Amount = 0, int[]? Values = null,
@@ -39,13 +40,15 @@ public sealed record ResourceState(string Id, string Source, int Current, int Ma
 public sealed record HitDiePool(int Sides, int Total, int Available);
 public sealed record InventoryItem(Guid Id, string DefinitionId, bool Equipped = false);
 public sealed record ClassLevel(string ClassId, int Level);
+public sealed record SpellSlotUsage(int[] SharedSpentByLevel, int PactSpent);
 
 public sealed record ProgressionState(string SpeciesId, string? SpeciesVariantId, string Size, string BackgroundId,
     Dictionary<Ability, int> BaseAbilities, Dictionary<Ability, int> BackgroundBonuses, Dictionary<Ability, int> AdvancementBonuses,
     ClassLevel[] Classes, string[] ClassSkills, string[] FeatIds, int MaximumHp,
     HitDiePool[] HitDice, ResourceState[] Resources, InventoryItem[] Inventory, string[] MasteredWeaponIds,
     string? SpeciesSkill = null, DateTimeOffset? LastLongRestAtUtc = null, Proficiency[]? ExtraProficiencies = null,
-    Dictionary<string,string>? SubclassIds = null, string? BackgroundToolId = null, string[]? ClassTools = null);
+    Dictionary<string,string>? SubclassIds = null, string? BackgroundToolId = null, string[]? ClassTools = null,
+    SpellSlotUsage? SpellSlots = null);
 
 public sealed record StatisticPart(string Source, int Value);
 public sealed record DerivedStatistic(int Total, StatisticPart[] Parts);

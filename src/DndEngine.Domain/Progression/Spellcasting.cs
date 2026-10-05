@@ -29,7 +29,10 @@ public static class SpellSlotCalculator
     public static SpellcastingSummary? Derive(Character character, ProgressionState state)
     {
         var casters = state.Classes.Where(x => AbilityFor(x.ClassId) is not null).ToArray();
-        if (casters.Length == 0) return null;
+        var spent = state.SpellSlots?.SharedSpentByLevel ?? new int[9];
+        if (spent.Length != 9) throw new RuleViolation("Shared spell slot expenditure must have nine levels.");
+        var pactSpent = state.SpellSlots?.PactSpent ?? 0;
+        if (casters.Length == 0 && spent.All(x => x == 0) && pactSpent == 0) return null;
         var classes = casters.Select(x =>
         {
             var ability = AbilityFor(x.ClassId)!.Value;
@@ -38,16 +41,21 @@ public static class SpellSlotCalculator
         }).ToArray();
         var slotClasses = casters.Where(x => x.ClassId != "warlock").ToArray();
         var casterLevel = slotClasses.Sum(x => x.ClassId is "paladin" or "ranger" ? (x.Level+1)/2 : x.Level);
-        var shared = (casterLevel == 0 ? [] : FullCasterSlots[Math.Clamp(casterLevel,0,20)])
+        var maxima = casterLevel == 0 ? new int[9] : FullCasterSlots[Math.Clamp(casterLevel,0,20)];
+        if (spent.Where((value,index) => value < 0 || value > maxima[index]).Any())
+            throw new RuleViolation("Shared spell slot expenditure exceeds available slots.");
+        var shared = maxima
             .Select((maximum,index) => (maximum,index)).Where(x => x.maximum > 0)
-            .Select(x => new SpellSlotPool(x.index+1,x.maximum,x.maximum,"multiclass-spellcasting",RecoveryKind.LongRest)).ToArray();
+            .Select(x => new SpellSlotPool(x.index+1,x.maximum,x.maximum-spent[x.index],"multiclass-spellcasting",RecoveryKind.LongRest)).ToArray();
         var warlock = state.Classes.SingleOrDefault(x => x.ClassId == "warlock");
         SpellSlotPool? pact = null;
         if (warlock is not null)
         {
             var (count,level) = PactSlots(warlock.Level);
-            if (count > 0) pact = new(level,count,count,"warlock-pact-magic",RecoveryKind.ShortRest);
+            if (count > 0) pact = new(level,count,count-pactSpent,"warlock-pact-magic",RecoveryKind.ShortRest);
         }
+        if (pactSpent < 0 || pactSpent > (pact?.Maximum ?? 0))
+            throw new RuleViolation("Pact Magic expenditure exceeds available slots.");
         return new(classes,shared,pact);
     }
 

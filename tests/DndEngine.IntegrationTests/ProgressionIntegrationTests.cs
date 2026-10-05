@@ -1,5 +1,6 @@
 using DndEngine.Application;
 using DndEngine.Domain;
+using DndEngine.Domain.Progression;
 using DndEngine.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -15,6 +16,55 @@ public sealed class ProgressionIntegrationTests
         new() { [Ability.Strength]=15,[Ability.Dexterity]=14,[Ability.Constitution]=14,[Ability.Intelligence]=10,[Ability.Wisdom]=12,[Ability.Charisma]=8 },
         new() { [Ability.Dexterity]=2,[Ability.Constitution]=1 },["athletics","perception"],
         StartingItemIds:["chain-mail","greatsword"],MasteredWeaponIds:["greatsword"],FightingStyleFeat:"defense");
+
+    [Fact]
+    public async Task MulticlassSpellSlotsPersistAndRecoverOnTheirOwnRestIntervals()
+    {
+        var path=Path.Combine(Path.GetTempPath(),"DndEngine.SpellSlotTests",Guid.NewGuid().ToString("N"));
+        Guid id; long revision;
+        await using(var provider=Provider(path))
+        {
+            await provider.InitializeDndEngineAsync();
+            await using var scope=provider.CreateAsyncScope();
+            var services=scope.ServiceProvider;
+            var campaign=await services.GetRequiredService<CampaignService>().CreateAsync(new("Spell slot test"));
+            var request=new CreateSrdCharacter(campaign.Id,"Arin","dwarf",null,"Medium","criminal","wizard",
+                Enum.GetValues<Ability>().ToDictionary(a=>a,_=>13),
+                new() { [Ability.Dexterity]=2,[Ability.Constitution]=1 },["arcana","history"]);
+            var service=services.GetRequiredService<ProgressionService>();
+            var sheet=await service.CreateAsync(request);
+            sheet=await service.LevelUpAsync(sheet.Id,new("warlock",sheet.Revision));
+            id=sheet.Id;
+            Assert.Equal(2,sheet.Spellcasting!.SharedSlots.Single().Current);
+            Assert.Equal(1,sheet.Spellcasting.PactMagicSlots!.Current);
+            sheet=await service.SpendSpellSlotAsync(id,new(SpellSlotPoolKind.Shared,1,sheet.Revision));
+            sheet=await service.SpendSpellSlotAsync(id,new(SpellSlotPoolKind.PactMagic,1,sheet.Revision));
+            Assert.Equal(1,sheet.Spellcasting!.SharedSlots.Single().Current);
+            Assert.Equal(0,sheet.Spellcasting.PactMagicSlots!.Current);
+            await Assert.ThrowsAsync<RuleViolation>(()=>service.SpendSpellSlotAsync(id,new(SpellSlotPoolKind.PactMagic,1,sheet.Revision)));
+            await Assert.ThrowsAsync<StateConflictException>(()=>service.SpendSpellSlotAsync(id,new(SpellSlotPoolKind.Shared,1,sheet.Revision-1)));
+            revision=sheet.Revision;
+        }
+        await using(var provider=Provider(path))
+        {
+            await provider.InitializeDndEngineAsync();
+            await using var scope=provider.CreateAsyncScope();
+            var service=scope.ServiceProvider.GetRequiredService<ProgressionService>();
+            var sheet=await service.SheetAsync(id);
+            Assert.Equal(revision,sheet.Revision);
+            Assert.Equal(1,sheet.Spellcasting!.SharedSlots.Single().Current);
+            Assert.Equal(0,sheet.Spellcasting.PactMagicSlots!.Current);
+            var shortRest=await service.ShortRestAsync(id,new([],sheet.Revision));
+            Assert.Equal(1,shortRest.Sheet.Spellcasting!.SharedSlots.Single().Current);
+            Assert.Equal(1,shortRest.Sheet.Spellcasting.PactMagicSlots!.Current);
+            Assert.Contains("Pact Magic slots restored",shortRest.OtherChanges);
+            var longRest=await service.LongRestAsync(id,new(shortRest.Sheet.Revision));
+            Assert.Equal(2,longRest.Sheet.Spellcasting!.SharedSlots.Single().Current);
+            Assert.Equal(1,longRest.Sheet.Spellcasting.PactMagicSlots!.Current);
+            var events=await scope.ServiceProvider.GetRequiredService<CampaignService>().EventsAsync(longRest.Sheet.CampaignId);
+            Assert.Equal(2,events.Count(x=>x.Type=="SpellSlotSpent"));
+        }
+    }
 
     [Fact]
     public async Task CreationProgressionRestAndRestartRetainDerivedState()

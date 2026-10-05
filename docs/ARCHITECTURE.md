@@ -74,7 +74,7 @@ The rules pack is intentionally pinned rather than silently overwritten. Content
 
 ## Spellcasting foundation (Phase 4)
 
-`SpellSlotCalculator` derives spellcasting abilities and save DC/attack bonus per casting class, a shared slot maximum from combined full-caster and rounded-up half-caster levels, and a separate Pact Magic pool for Warlock levels. This is a pure derivation from the current character level allocations. No slot state, class spell list, spellbook, preparation, cast command, concentration instance or spell effect is stored or executed yet. Those need versioned spell definitions and character-owned magic state before exposing a cast operation.
+`SpellSlotCalculator` derives spellcasting abilities and save DC/attack bonus per casting class, a shared slot maximum from combined full-caster and rounded-up half-caster levels, and a separate Pact Magic pool for Warlock levels. The progression JSON stores spent counts for the shared levels and Pact Magic; the calculator validates them against derived maxima. A slot spend follows the same revision-checked character transaction and audit path as other progression changes. Short Rest resets Pact Magic expenditure; Long Rest resets both. No class spell list, spellbook, preparation, cast command, concentration instance or spell effect is stored or executed yet. Those need versioned spell definitions and character-owned choices before exposing a cast operation.
 
 ## Version expansion
 

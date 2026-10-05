@@ -18,6 +18,7 @@ public sealed record EquipItem(Guid ItemId, long ExpectedRevision);
 public sealed record ShortRestRequest(int[] HitDieSides, long ExpectedRevision);
 public sealed record LongRestRequest(long ExpectedRevision, string[]? MasteredWeaponIds = null);
 public sealed record SpendResource(string ResourceId, int Amount, long ExpectedRevision);
+public sealed record SpendSpellSlot(SpellSlotPoolKind Pool, int SpellLevel, long ExpectedRevision);
 public sealed record RestResult(CharacterSheet Sheet, int[] HitDieRolls, int HitPointsRegained,
     ResourceState[] ResourceChanges, string[] OtherChanges);
 public sealed record CharacterChoices(CharacterRules Rules);
