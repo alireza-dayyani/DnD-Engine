@@ -6,10 +6,12 @@ namespace DndEngine.Application;
 
 public sealed class ProgressionService(ICampaignStore campaigns, IProgressionStore progressions,
     ICharacterRulesCatalog characterCatalog, ICombatCatalog combatCatalog, ICombatStore combatStore,
-    IDiceRoller dice, TimeProvider clock)
+    ISpellCatalog spellCatalog, IDiceRoller dice, TimeProvider clock)
 {
     public async Task<CharacterRules> ChoicesAsync(CancellationToken ct = default) =>
         await characterCatalog.GetAsync(Ruleset.Current,ct);
+
+    public Task<SpellDefinition[]> SpellChoicesAsync(CancellationToken ct = default) => spellCatalog.GetAsync(Ruleset.Current,ct);
 
     public async Task<CharacterSheet> CreateAsync(CreateSrdCharacter request, CancellationToken ct = default)
     {
@@ -17,6 +19,7 @@ public sealed class ProgressionService(ICampaignStore campaigns, IProgressionSto
         campaign.Ruleset.RequireSupported();
         var rules = await characterCatalog.GetAsync(campaign.Ruleset,ct);
         var combat = await combatCatalog.GetAsync(campaign.Ruleset,ct);
+        var spells = await spellCatalog.GetAsync(campaign.Ruleset,ct);
         var species = rules.Species.SingleOrDefault(x => x.Id == request.SpeciesId) ?? throw new RuleViolation("Unknown species.");
         var background = rules.Backgrounds.SingleOrDefault(x => x.Id == request.BackgroundId) ?? throw new RuleViolation("Unknown background.");
         var @class = rules.Classes.SingleOrDefault(x => x.Id == request.ClassId) ?? throw new RuleViolation("Unknown class.");
@@ -62,7 +65,8 @@ public sealed class ProgressionService(ICampaignStore campaigns, IProgressionSto
         var speciesHp = species.Features.SelectMany(x => x.Effects).Where(x => x.Kind == EffectKind.HitPointsPerLevel).Sum(x => x.Amount);
         var maxHp = Math.Max(1,@class.HitDie + constitution + speciesHp);
         state = state with { MaximumHp = maxHp, Resources = ResourcesFor(state,rules,[]),
-            BackgroundToolId=request.BackgroundToolId, ClassTools=request.ClassTools ?? [],ExtraProficiencies=featProficiencies };
+            BackgroundToolId=request.BackgroundToolId, ClassTools=request.ClassTools ?? [],ExtraProficiencies=featProficiencies,
+            PreparedSpells=ValidateStartingSpells(@class.Id,request.PreparedSpellIds,spells) };
         var character = Materialize(Guid.NewGuid(),campaign.Id,request.Name,state,rules,combat,new HitPoints(maxHp),0);
         var sheet = CharacterDeriver.Derive(character,state,rules,combat);
         var profile = Profile(character.Id,sheet,combat,null);
@@ -251,32 +255,45 @@ public sealed class ProgressionService(ICampaignStore campaigns, IProgressionSto
     {
         var (character,state,rules,combat) = await Load(id,ct);
         await RequireMutable(character,request.ExpectedRevision,ct);
-        Guard.Defined(request.Pool);
-        Guard.Range(request.SpellLevel,1,9,"Spell level");
-        var summary = SpellSlotCalculator.Derive(character,state) ?? throw new RuleViolation("Character has no spell slots.");
-        var shared = (int[])(state.SpellSlots?.SharedSpentByLevel.Clone() ?? new int[9]);
-        var pactSpent = state.SpellSlots?.PactSpent ?? 0;
-        int before;
-        if (request.Pool == SpellSlotPoolKind.Shared)
-        {
-            var pool = summary.SharedSlots.SingleOrDefault(x => x.SpellLevel == request.SpellLevel)
-                ?? throw new RuleViolation("Shared spell slot level is unavailable.");
-            before = pool.Current;
-            if (before == 0) throw new RuleViolation("No shared spell slot remains at that level.");
-            shared[request.SpellLevel-1]++;
-        }
-        else
-        {
-            var pool = summary.PactMagicSlots;
-            if (pool is null || pool.SpellLevel != request.SpellLevel)
-                throw new RuleViolation("Pact Magic slot level is unavailable.");
-            before = pool.Current;
-            if (before == 0) throw new RuleViolation("No Pact Magic slot remains.");
-            pactSpent++;
-        }
-        var updated = state with { SpellSlots = new(shared,pactSpent) };
+        var (usage,before) = SpellSlotCalculator.Spend(character,state,request.Pool,request.SpellLevel);
+        var updated = state with { SpellSlots=usage };
         return await Save(character,updated,rules,combat,"SpellSlotSpent",
             new { pool=request.Pool,spellLevel=request.SpellLevel,before,after=before-1 },ct);
+    }
+
+    public async Task<SpellCastResult> CastPreparedSpellAsync(Guid id, CastPreparedSpell request, CancellationToken ct = default)
+    {
+        var (character,state,rules,combat) = await Load(id,ct);
+        await RequireMutable(character,request.ExpectedRevision,ct);
+        if (!request.ComponentsAvailable) throw new RuleViolation("Verbal and somatic spell components must be available.");
+        character.Health.RequireAlive();
+        if (character.Health.State.Unconscious) throw new RuleViolation("An unconscious character cannot cast a spell.");
+        var profile = await combatStore.GetProfileAsync(id,ct) ?? throw new RuleViolation("Combat profile is missing.");
+        new ConditionEffects(character,profile).RequireAction();
+        var sheet = CharacterDeriver.Derive(character,state,rules,combat);
+        if (sheet.SpellcastingBlockedByArmor) throw new RuleViolation("Untrained armor prevents spellcasting.");
+        var campaign = await campaigns.GetCampaignAsync(character.CampaignId,ct) ?? throw new NotFoundException("Campaign not found.");
+        var spell = (await spellCatalog.GetAsync(campaign.Ruleset,ct)).SingleOrDefault(x => x.Id == request.SpellId)
+            ?? throw new RuleViolation("Spell is not in the installed catalog.");
+        if (!(state.PreparedSpells ?? []).Any(x => x.ClassId == request.ClassId && x.SpellId == spell.Id) ||
+            !spell.ClassIds.Contains(request.ClassId))
+            throw new RuleViolation("Spell is not prepared for this class.");
+        if (request.SpellLevel < spell.Level) throw new RuleViolation("Spell slot is below the spell's level.");
+        var casting = sheet.Spellcasting?.Classes.SingleOrDefault(x => x.ClassId == request.ClassId)
+            ?? throw new RuleViolation("Class has no spellcasting feature.");
+        if (spell.Effect != SpellEffectKind.SelfHealing || spell.Id != "cure-wounds")
+            throw new RuleViolation("Spell effect is not implemented.");
+        var (usage,before) = SpellSlotCalculator.Spend(character,state,request.Pool,request.SpellLevel);
+        var rolls = dice.Roll(new(2*request.SpellLevel,8));
+        var healing = Math.Max(0,rolls.Total+casting.AbilityModifier);
+        var change = character.Health.Heal(healing);
+        var updated = state with { SpellSlots=usage };
+        var resultSheet = await Save(character,updated,rules,combat,"SpellCast",new {
+            spellId=spell.Id,classId=request.ClassId,pool=request.Pool,slotLevel=request.SpellLevel,
+            targetCharacterId=id,componentsAvailable=request.ComponentsAvailable,slotBefore=before,slotAfter=before-1,
+            rolls=rolls.Rolls,abilityModifier=casting.AbilityModifier,health=change },ct);
+        return new(resultSheet,request.ClassId,spell.Id,request.Pool,request.SpellLevel,
+            rolls.Rolls.ToArray(),casting.AbilityModifier,change.HitPointsRegained);
     }
 
     public async Task<RestResult> ShortRestAsync(Guid id, ShortRestRequest request, CancellationToken ct = default)
@@ -404,6 +421,19 @@ public sealed class ProgressionService(ICampaignStore campaigns, IProgressionSto
                 throw new RuleViolation("Feat proficiency choice duplicates existing training.");
         }
         return values.Select(x => x with { Source=source }).ToArray();
+    }
+    private static PreparedSpell[] ValidateStartingSpells(string classId,string[]? selected,SpellDefinition[] catalog)
+    {
+        var ids = selected ?? [];
+        if (ids.Distinct(StringComparer.Ordinal).Count() != ids.Length)
+            throw new RuleViolation("Prepared spells must be distinct.");
+        foreach (var id in ids)
+        {
+            var spell = catalog.SingleOrDefault(x => x.Id == id);
+            if (spell is null || spell.Level != 1 || !spell.ClassIds.Contains(classId))
+                throw new RuleViolation("Starting spell must be a level 1 spell on the chosen class list.");
+        }
+        return ids.Select(id => new PreparedSpell(classId,id)).ToArray();
     }
     private static Character Materialize(Guid id,Guid campaignId,string name,ProgressionState state,CharacterRules rules,
         CombatContent combat,HitPoints health,long revision)

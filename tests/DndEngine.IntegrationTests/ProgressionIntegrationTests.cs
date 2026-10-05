@@ -67,6 +67,54 @@ public sealed class ProgressionIntegrationTests
     }
 
     [Fact]
+    public async Task PreparedCureWoundsCanUsePactMagicAndPersistsHealingWithTheSlot()
+    {
+        var path=Path.Combine(Path.GetTempPath(),"DndEngine.SpellCastTests",Guid.NewGuid().ToString("N"));
+        Guid id; int healedMaximum;
+        await using(var provider=Provider(path,3,4))
+        {
+            await provider.InitializeDndEngineAsync();
+            await using var scope=provider.CreateAsyncScope();
+            var services=scope.ServiceProvider;
+            var campaign=await services.GetRequiredService<CampaignService>().CreateAsync(new("Spell cast test"));
+            var request=new CreateSrdCharacter(campaign.Id,"Elen","dwarf",null,"Medium","criminal","cleric",
+                Enum.GetValues<Ability>().ToDictionary(a=>a,_=>13),
+                new() { [Ability.Dexterity]=2,[Ability.Constitution]=1 },["history","insight"],
+                PreparedSpellIds:["cure-wounds"]);
+            var service=services.GetRequiredService<ProgressionService>();
+            var sheet=await service.CreateAsync(request);
+            Assert.Contains(sheet.PreparedSpells!,x=>x.ClassId=="cleric" && x.SpellId=="cure-wounds");
+            sheet=await service.LevelUpAsync(sheet.Id,new("warlock",sheet.Revision));
+            id=sheet.Id; healedMaximum=sheet.MaximumHp;
+            await services.GetRequiredService<MechanicsService>().DamageAsync(id,new(6));
+            sheet=await service.SheetAsync(id);
+            await Assert.ThrowsAsync<RuleViolation>(()=>service.CastPreparedSpellAsync(id,
+                new("cleric","cure-wounds",SpellSlotPoolKind.PactMagic,1,sheet.Revision,false)));
+            var result=await service.CastPreparedSpellAsync(id,
+                new("cleric","cure-wounds",SpellSlotPoolKind.PactMagic,1,sheet.Revision,true));
+            Assert.Equal([3,4],result.Rolls);
+            Assert.Equal(6,result.HitPointsRegained);
+            Assert.Equal(healedMaximum,result.Sheet.CurrentHp);
+            Assert.Equal(0,result.Sheet.Spellcasting!.PactMagicSlots!.Current);
+            Assert.Equal(2,result.Sheet.Spellcasting.SharedSlots.Single().Current);
+        }
+        await using(var provider=Provider(path))
+        {
+            await provider.InitializeDndEngineAsync();
+            await using var scope=provider.CreateAsyncScope();
+            var services=scope.ServiceProvider;
+            var service=services.GetRequiredService<ProgressionService>();
+            var sheet=await service.SheetAsync(id);
+            Assert.Equal(healedMaximum,sheet.CurrentHp);
+            Assert.Equal(0,sheet.Spellcasting!.PactMagicSlots!.Current);
+            Assert.Contains(sheet.PreparedSpells!,x=>x.SpellId=="cure-wounds");
+            var events=await services.GetRequiredService<CampaignService>().EventsAsync(sheet.CampaignId);
+            Assert.Contains(events,x=>x.Type=="SpellCast");
+            Assert.Single(await service.SpellChoicesAsync());
+        }
+    }
+
+    [Fact]
     public async Task CreationProgressionRestAndRestartRetainDerivedState()
     {
         var path=Path.Combine(Path.GetTempPath(),"DndEngine.ProgressionTests",Guid.NewGuid().ToString("N"));
@@ -104,8 +152,9 @@ public sealed class ProgressionIntegrationTests
             var sheet=await services.GetRequiredService<ProgressionService>().SheetAsync(id);
             Assert.Equal(2,sheet.Level); Assert.Equal(17,sheet.ArmorClass.Total);
             Assert.Equal(2,sheet.HitDice.Single().Available);
-            Assert.Equal(3,(await services.GetRequiredService<RulesDbContext>().Database.GetAppliedMigrationsAsync()).Count());
+            Assert.Equal(4,(await services.GetRequiredService<RulesDbContext>().Database.GetAppliedMigrationsAsync()).Count());
             Assert.Equal(3,(await services.GetRequiredService<CampaignDbContext>().Database.GetAppliedMigrationsAsync()).Count());
+            Assert.False(services.GetRequiredService<RulesDbContext>().Database.HasPendingModelChanges());
             var events=await services.GetRequiredService<CampaignService>().EventsAsync(campaignId);
             Assert.Contains(events,x=>x.Type=="LevelGained");
         }

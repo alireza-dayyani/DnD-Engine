@@ -8,7 +8,7 @@ public sealed record CreateSrdCharacter(Guid CampaignId, string Name, string Spe
     Dictionary<Ability,int> BackgroundBonuses, string[] ClassSkills, string? HumanOriginFeat = null,
     string[]? StartingItemIds = null, string[]? MasteredWeaponIds = null, string? SpeciesSkill = null,
     string? FightingStyleFeat = null, string? BackgroundToolId = null, string[]? ClassTools = null,
-    Proficiency[]? FeatProficiencies = null);
+    Proficiency[]? FeatProficiencies = null, string[]? PreparedSpellIds = null);
 public sealed record LevelUpCharacter(string ClassId, long ExpectedRevision, string HpMethod = "Fixed",
     string? FeatId = null, Dictionary<Ability,int>? AbilityIncreases = null, string? MulticlassSkill = null,
     string? SubclassId = null, string? FightingStyleFeat = null, string? MulticlassTool = null,
@@ -19,6 +19,10 @@ public sealed record ShortRestRequest(int[] HitDieSides, long ExpectedRevision);
 public sealed record LongRestRequest(long ExpectedRevision, string[]? MasteredWeaponIds = null);
 public sealed record SpendResource(string ResourceId, int Amount, long ExpectedRevision);
 public sealed record SpendSpellSlot(SpellSlotPoolKind Pool, int SpellLevel, long ExpectedRevision);
+public sealed record CastPreparedSpell(string ClassId, string SpellId, SpellSlotPoolKind Pool, int SpellLevel,
+    long ExpectedRevision, bool ComponentsAvailable);
+public sealed record SpellCastResult(CharacterSheet Sheet, string ClassId, string SpellId, SpellSlotPoolKind Pool,
+    int SpellLevel, int[] Rolls, int AbilityModifier, int HitPointsRegained);
 public sealed record RestResult(CharacterSheet Sheet, int[] HitDieRolls, int HitPointsRegained,
     ResourceState[] ResourceChanges, string[] OtherChanges);
 public sealed record CharacterChoices(CharacterRules Rules);
@@ -26,6 +30,10 @@ public sealed record CharacterChoices(CharacterRules Rules);
 public interface ICharacterRulesCatalog
 {
     Task<CharacterRules> GetAsync(Ruleset ruleset, CancellationToken ct);
+}
+public interface ISpellCatalog
+{
+    Task<SpellDefinition[]> GetAsync(Ruleset ruleset, CancellationToken ct);
 }
 public interface IProgressionStore
 {

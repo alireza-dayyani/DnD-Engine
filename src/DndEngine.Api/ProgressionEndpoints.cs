@@ -7,6 +7,7 @@ public static class ProgressionEndpoints
     public static void MapProgression(this WebApplication app)
     {
         app.MapGet("/character-choices", (ProgressionService service,CancellationToken ct) => service.ChoicesAsync(ct));
+        app.MapGet("/spells", (ProgressionService service,CancellationToken ct) => service.SpellChoicesAsync(ct));
         app.MapPost("/srd-characters", async (CreateSrdCharacter request,ProgressionService service,CancellationToken ct) =>
         {
             var sheet = await service.CreateAsync(request,ct);
@@ -21,6 +22,7 @@ public static class ProgressionEndpoints
         app.MapPost("/characters/{id:guid}/inventory/remove", (Guid id,EquipItem request,ProgressionService service,CancellationToken ct) => service.RemoveItemAsync(id,request,ct));
         app.MapPost("/characters/{id:guid}/resources/spend", (Guid id,SpendResource request,ProgressionService service,CancellationToken ct) => service.SpendResourceAsync(id,request,ct));
         app.MapPost("/characters/{id:guid}/spell-slots/spend", (Guid id,SpendSpellSlot request,ProgressionService service,CancellationToken ct) => service.SpendSpellSlotAsync(id,request,ct));
+        app.MapPost("/characters/{id:guid}/spells/cast-self", (Guid id,CastPreparedSpell request,ProgressionService service,CancellationToken ct) => service.CastPreparedSpellAsync(id,request,ct));
         app.MapPost("/characters/{id:guid}/rests/short", (Guid id,ShortRestRequest request,ProgressionService service,CancellationToken ct) => service.ShortRestAsync(id,request,ct));
         app.MapPost("/characters/{id:guid}/rests/long", (Guid id,LongRestRequest request,ProgressionService service,CancellationToken ct) => service.LongRestAsync(id,request,ct));
     }

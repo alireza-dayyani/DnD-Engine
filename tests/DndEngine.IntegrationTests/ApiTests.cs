@@ -10,7 +10,7 @@ namespace DndEngine.IntegrationTests;
 
 public class ApiTests
 {
-    private sealed class Factory : WebApplicationFactory<Program>
+    private sealed class Factory(params int[] rolls) : WebApplicationFactory<Program>
     {
         private readonly string path = Path.Combine(Path.GetTempPath(),"DndEngine.ApiTests",Guid.NewGuid().ToString("N"));
         protected override void ConfigureWebHost(IWebHostBuilder builder)
@@ -19,7 +19,8 @@ public class ApiTests
             builder.UseSetting("DataDirectory",path);
             builder.ConfigureAppConfiguration((_,config)=>config.AddInMemoryCollection(new Dictionary<string,string?>
                 { ["DataDirectory"]=path }));
-            builder.ConfigureServices(services=>services.AddSingleton<IDiceRoller>(new FixedDiceRoller(11,7,16,10)));
+            builder.ConfigureServices(services=>services.AddSingleton<IDiceRoller>(
+                new FixedDiceRoller(rolls.Length==0 ? [11,7,16,10] : rolls)));
         }
     }
     [Fact]
@@ -75,6 +76,34 @@ public class ApiTests
             new { pool="PactMagic",spellLevel=1,expectedRevision=revision+1 })).StatusCode);
         var summary=await client.GetFromJsonAsync<JsonElement>($"/characters/{id}/spellcasting");
         Assert.Equal(1,summary.GetProperty("sharedSlots")[0].GetProperty("current").GetInt32());
+    }
+
+    [Fact]
+    public async Task HttpPreparedCureWoundsHealsAndConsumesOneSlot()
+    {
+        await using var app=new Factory(3,4); using var client=app.CreateClient();
+        var spells=await client.GetFromJsonAsync<JsonElement>("/spells");
+        Assert.Equal("cure-wounds",spells[0].GetProperty("id").GetString());
+        var campaign=await Post(client,"/campaigns",new { name="Spell API" });
+        var campaignId=campaign.GetProperty("id").GetGuid();
+        var sheet=await Post(client,"/srd-characters",new {
+            campaignId,name="Elen",speciesId="dwarf",speciesVariantId=(string?)null,size="Medium",backgroundId="criminal",classId="cleric",
+            baseAbilities=new { Strength=13,Dexterity=13,Constitution=13,Intelligence=13,Wisdom=13,Charisma=13 },
+            backgroundBonuses=new { Dexterity=2,Constitution=1 },classSkills=new[]{"history","insight"},
+            preparedSpellIds=new[]{"cure-wounds"}
+        });
+        var id=sheet.GetProperty("id").GetGuid();
+        await Post(client,$"/characters/{id}/damage",new { amount=6 });
+        sheet=await client.GetFromJsonAsync<JsonElement>($"/characters/{id}/sheet");
+        var result=await Post(client,$"/characters/{id}/spells/cast-self",new {
+            classId="cleric",spellId="cure-wounds",pool="Shared",spellLevel=1,
+            expectedRevision=sheet.GetProperty("revision").GetInt64(),componentsAvailable=true
+        });
+        Assert.Equal(6,result.GetProperty("hitPointsRegained").GetInt32());
+        Assert.Equal(1,result.GetProperty("sheet").GetProperty("spellcasting")
+            .GetProperty("sharedSlots")[0].GetProperty("current").GetInt32());
+        Assert.Equal(result.GetProperty("sheet").GetProperty("maximumHp").GetInt32(),
+            result.GetProperty("sheet").GetProperty("currentHp").GetInt32());
     }
     private static async Task<JsonElement> Post(HttpClient client,string url,object body)
     {

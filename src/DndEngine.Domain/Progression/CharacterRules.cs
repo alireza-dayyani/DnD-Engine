@@ -48,7 +48,7 @@ public sealed record ProgressionState(string SpeciesId, string? SpeciesVariantId
     HitDiePool[] HitDice, ResourceState[] Resources, InventoryItem[] Inventory, string[] MasteredWeaponIds,
     string? SpeciesSkill = null, DateTimeOffset? LastLongRestAtUtc = null, Proficiency[]? ExtraProficiencies = null,
     Dictionary<string,string>? SubclassIds = null, string? BackgroundToolId = null, string[]? ClassTools = null,
-    SpellSlotUsage? SpellSlots = null);
+    SpellSlotUsage? SpellSlots = null, PreparedSpell[]? PreparedSpells = null);
 
 public sealed record StatisticPart(string Source, int Value);
 public sealed record DerivedStatistic(int Total, StatisticPart[] Parts);
@@ -64,4 +64,4 @@ public sealed record CharacterSheet(Guid Id, Guid CampaignId, string Name, long 
     CombatCapabilities CombatCapabilities, IReadOnlyDictionary<string,string>? SubclassIds = null,
     IReadOnlyDictionary<Ability,DerivedStatistic>? AbilityBreakdowns = null, DerivedStatistic? SpeedBreakdown = null,
     bool UntrainedArmorPenalty = false, bool SpellcastingBlockedByArmor = false, int DarkvisionFeet = 0,
-    SpellcastingSummary? Spellcasting = null);
+    SpellcastingSummary? Spellcasting = null, PreparedSpell[]? PreparedSpells = null);

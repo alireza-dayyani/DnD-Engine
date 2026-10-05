@@ -47,6 +47,16 @@ namespace DndEngine.Infrastructure.Migrations.Rules
                     b.ToTable("CharacterContent");
                 });
 
+            modelBuilder.Entity("DndEngine.Infrastructure.SpellContentRow", b =>
+                {
+                    b.Property<string>("RulesetId").HasColumnType("TEXT");
+                    b.Property<string>("Version").HasColumnType("TEXT");
+                    b.Property<string>("ContentHash").IsRequired().HasColumnType("TEXT");
+                    b.Property<string>("DataJson").IsRequired().HasColumnType("TEXT");
+                    b.HasKey("RulesetId", "Version");
+                    b.ToTable("SpellContent");
+                });
+
             modelBuilder.Entity("DndEngine.Infrastructure.RulesetRow", b =>
                 {
                     b.Property<string>("Id")
@@ -110,6 +120,12 @@ namespace DndEngine.Infrastructure.Migrations.Rules
                 });
 
             modelBuilder.Entity("DndEngine.Infrastructure.CharacterContentRow", b =>
+                {
+                    b.HasOne("DndEngine.Infrastructure.RulesetRow", null).WithMany()
+                        .HasForeignKey("RulesetId", "Version").OnDelete(DeleteBehavior.Restrict).IsRequired();
+                });
+
+            modelBuilder.Entity("DndEngine.Infrastructure.SpellContentRow", b =>
                 {
                     b.HasOne("DndEngine.Infrastructure.RulesetRow", null).WithMany()
                         .HasForeignKey("RulesetId", "Version").OnDelete(DeleteBehavior.Restrict).IsRequired();

@@ -2,9 +2,9 @@
 
 Phase 1 delivered character/check/HP/persistence foundations. Phase 2 delivered the bounded weapon-combat foundation described in `PHASE2_REPORT.md`. Phase 3 adds SRD character choices, a derived sheet, level progression, a general inventory, armor, class resources, rests and a multiclass foundation. See `PHASE3_REPORT.md` for tested scope and deliberate gaps. Older paragraphs below are retained as historical planning context; they are not a description of the current implementation.
 
-Phase 4 is now underway on `codex/phase4-magic-foundation`. Its first increment derives spellcasting abilities, attack/save DCs, shared full/half-caster spell slots, and Warlock Pact Magic slots from Phase 3 class levels. See `PHASE4_REPORT.md`. Recommended priorities for the rest of Phase 4:
+Phase 4 is underway on `codex/phase4-magic-foundation`. It derives spellcasting abilities, attack/save DCs, shared full/half-caster slots and Warlock Pact Magic slots; persists their expenditure and rest recovery; and supports one prepared Cure Wounds self-cast outside combat. See `PHASE4_REPORT.md`. Recommended priorities for the rest of Phase 4:
 
-1. Spell definitions, prepared/known spells, slots, multiclass spell-slot calculation, casting and concentration with reusable spell effects.
+1. Expand versioned spell definitions, class-specific preparation and cantrips, combat casting and concentration with reusable spell effects.
 2. Finish feature and subclass action behavior, feature choices, expertise, mastery-property execution and resource triggers around the new character catalog.
 3. Exact starting equipment package choices and quantities, encumbrance, ammunition replenishment, held-item state, and recovery of thrown/dropped items.
 4. World-time rest lifecycle, stabilization/recovery and revised knockout; complete condition effects on checks and senses.

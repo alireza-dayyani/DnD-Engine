@@ -8,7 +8,7 @@ public sealed record ClassSpellcasting(string ClassId, int ClassLevel, Ability A
 public sealed record SpellcastingSummary(ClassSpellcasting[] Classes, SpellSlotPool[] SharedSlots,
     SpellSlotPool? PactMagicSlots);
 
-/// <summary>SRD 5.2.1 slot progression. Spell descriptions and cast effects are resolved by later Phase 4 work.</summary>
+/// <summary>SRD 5.2.1 slot progression and expenditure shared by manual slot use and the initial cast path.</summary>
 public static class SpellSlotCalculator
 {
     private static readonly int[][] FullCasterSlots =
@@ -57,6 +57,29 @@ public static class SpellSlotCalculator
         if (pactSpent < 0 || pactSpent > (pact?.Maximum ?? 0))
             throw new RuleViolation("Pact Magic expenditure exceeds available slots.");
         return new(classes,shared,pact);
+    }
+
+    public static (SpellSlotUsage Usage, int RemainingBefore) Spend(Character character, ProgressionState state,
+        SpellSlotPoolKind poolKind, int spellLevel)
+    {
+        Guard.Defined(poolKind);
+        Guard.Range(spellLevel,1,9,"Spell level");
+        var summary = Derive(character,state) ?? throw new RuleViolation("Character has no spell slots.");
+        var shared = (int[])(state.SpellSlots?.SharedSpentByLevel.Clone() ?? new int[9]);
+        var pactSpent = state.SpellSlots?.PactSpent ?? 0;
+        if (poolKind == SpellSlotPoolKind.Shared)
+        {
+            var slot = summary.SharedSlots.SingleOrDefault(x => x.SpellLevel == spellLevel)
+                ?? throw new RuleViolation("Shared spell slot level is unavailable.");
+            if (slot.Current == 0) throw new RuleViolation("No shared spell slot remains at that level.");
+            shared[spellLevel-1]++;
+            return (new(shared,pactSpent),slot.Current);
+        }
+        var pact = summary.PactMagicSlots;
+        if (pact is null || pact.SpellLevel != spellLevel)
+            throw new RuleViolation("Pact Magic slot level is unavailable.");
+        if (pact.Current == 0) throw new RuleViolation("No Pact Magic slot remains.");
+        return (new(shared,pactSpent+1),pact.Current);
     }
 
     private static Ability? AbilityFor(string id) => id switch
