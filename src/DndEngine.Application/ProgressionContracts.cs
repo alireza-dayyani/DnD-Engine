@@ -12,11 +12,12 @@ public sealed record CreateSrdCharacter(Guid CampaignId, string Name, string Spe
 public sealed record LevelUpCharacter(string ClassId, long ExpectedRevision, string HpMethod = "Fixed",
     string? FeatId = null, Dictionary<Ability,int>? AbilityIncreases = null, string? MulticlassSkill = null,
     string? SubclassId = null, string? FightingStyleFeat = null, string? MulticlassTool = null,
-    Proficiency[]? FeatProficiencies = null);
+    Proficiency[]? FeatProficiencies = null, SpellReplacement? SpellReplacement = null);
 public sealed record ItemChange(string DefinitionId, long ExpectedRevision);
 public sealed record EquipItem(Guid ItemId, long ExpectedRevision);
 public sealed record ShortRestRequest(int[] HitDieSides, long ExpectedRevision);
-public sealed record LongRestRequest(long ExpectedRevision, string[]? MasteredWeaponIds = null);
+public sealed record LongRestRequest(long ExpectedRevision, string[]? MasteredWeaponIds = null,
+    SpellReplacement[]? SpellReplacements = null);
 public sealed record SpendResource(string ResourceId, int Amount, long ExpectedRevision);
 public sealed record SpendSpellSlot(SpellSlotPoolKind Pool, int SpellLevel, long ExpectedRevision);
 public sealed record CastPreparedSpell(string ClassId, string SpellId, SpellSlotPoolKind Pool, int SpellLevel,

@@ -188,12 +188,15 @@ public sealed class ProgressionService(ICampaignStore campaigns, IProgressionSto
         var extraChoices = FeatProficiencies(request.FeatProficiencies,selectedFeat?.ProficiencyChoiceCount ?? 0,
             request.FeatId is null ? "feat" : $"feat:{request.FeatId}",rules,oldSheet.Proficiencies);
         extraProficiencies.AddRange(extraChoices);
+        var prepared = await ReplaceSpellsAsync(character,state,classes,
+            request.SpellReplacement is null ? [] : [request.SpellReplacement],
+            SpellPreparationMoment.ClassLevelGained,next.Id,ct);
         int dieResult;
         if (request.HpMethod.Equals("Fixed",StringComparison.OrdinalIgnoreCase)) dieResult = next.HitDie / 2 + 1;
         else if (request.HpMethod.Equals("Roll",StringComparison.OrdinalIgnoreCase)) dieResult = dice.Roll(new(1,next.HitDie)).Total;
         else throw new RuleViolation("HP method must be Fixed or Roll.");
         var updated = state with { Classes = classes, FeatIds = feats.ToArray(), AdvancementBonuses = bonuses,
-            ExtraProficiencies = extraProficiencies.ToArray(), SubclassIds = subclassIds };
+            ExtraProficiencies = extraProficiencies.ToArray(), SubclassIds = subclassIds, PreparedSpells=prepared };
         var newCon = new AbilityScore(updated.BaseAbilities[Ability.Constitution] + updated.BackgroundBonuses.GetValueOrDefault(Ability.Constitution) + bonuses.GetValueOrDefault(Ability.Constitution)).Modifier;
         var oldCon = oldSheet.AbilityModifiers[Ability.Constitution];
         var species = rules.Species.Single(x => x.Id == state.SpeciesId);
@@ -209,7 +212,9 @@ public sealed class ProgressionService(ICampaignStore campaigns, IProgressionSto
         var nextCharacter = Materialize(character.Id,character.CampaignId,character.Name,updated,rules,combat,health,character.Revision);
         var sheet = CharacterDeriver.Derive(nextCharacter,updated,rules,combat);
         var profile = Profile(id,sheet,combat,await combatStore.GetProfileAsync(id,ct));
-        await progressions.SaveAsync(nextCharacter,updated,profile,Event(character,"LevelGained",character.Revision+1,new { classId=next.Id,classLevel,totalLevel=sheet.Level,hpGain,feat=request.FeatId }),ct);
+        await progressions.SaveAsync(nextCharacter,updated,profile,Event(character,"LevelGained",character.Revision+1,
+            new { classId=next.Id,classLevel,totalLevel=sheet.Level,hpGain,feat=request.FeatId,
+                spellReplacement=request.SpellReplacement }),ct);
         return sheet with { Revision = character.Revision+1 };
     }
 
@@ -335,12 +340,16 @@ public sealed class ProgressionService(ICampaignStore campaigns, IProgressionSto
         var now = clock.GetUtcNow();
         if (state.LastLongRestAtUtc is { } last && now-last < TimeSpan.FromHours(24))
             throw new RuleViolation("A new Long Rest cannot finish before the required 16-hour interval and 8-hour rest.");
+        var replacements = request.SpellReplacements ?? [];
+        var prepared = await ReplaceSpellsAsync(character,state,state.Classes,replacements,
+            SpellPreparationMoment.LongRest,null,ct);
         var before = character.Health.State.Current;
         var health = new HitPoints(character.Health.State with { Current=character.Health.State.Maximum, Temporary=0,Stable=false,
             DeathSuccesses=0,DeathFailures=0 });
         var updated = state with { HitDice=state.HitDice.Select(x => x with { Available=x.Total }).ToArray(),
             Resources=state.Resources.Select(x => x with { Current=x.Maximum }).ToArray(), LastLongRestAtUtc=now,
-            MasteredWeaponIds=request.MasteredWeaponIds ?? state.MasteredWeaponIds, SpellSlots=null };
+            MasteredWeaponIds=request.MasteredWeaponIds ?? state.MasteredWeaponIds, SpellSlots=null,
+            PreparedSpells=prepared };
         var nextCharacter = Materialize(character.Id,character.CampaignId,character.Name,updated,rules,combat,health,character.Revision);
         var sheet = CharacterDeriver.Derive(nextCharacter,updated,rules,combat);
         var oldProfile = await combatStore.GetProfileAsync(id,ct);
@@ -351,10 +360,12 @@ public sealed class ProgressionService(ICampaignStore campaigns, IProgressionSto
         var pactRestored = state.SpellSlots?.PactSpent ?? 0;
         await progressions.SaveAsync(nextCharacter,updated,profile,Event(character,"RestCompleted",character.Revision+1,
             new { kind="Long",hpRegained=health.State.Current-before,exhaustionReduced=exhaustion is not null,
-                sharedSlotsRestored=sharedRestored,pactSlotsRestored=pactRestored }),ct);
+                sharedSlotsRestored=sharedRestored,pactSlotsRestored=pactRestored,
+                spellReplacements=replacements }),ct);
         var changes = new List<string> { "Temporary HP expired" };
         if (exhaustion is not null) changes.Add("Exhaustion reduced by one");
         if (sharedRestored > 0 || pactRestored > 0) changes.Add("Spell slots restored");
+        if (replacements.Length > 0) changes.Add("Prepared spells replaced");
         return new(sheet with { Revision=character.Revision+1 },[],health.State.Current-before,
             updated.Resources.Where((x,i) => x.Current != state.Resources[i].Current).ToArray(),changes.ToArray());
     }
@@ -367,6 +378,18 @@ public sealed class ProgressionService(ICampaignStore campaigns, IProgressionSto
         var profile = Profile(character.Id,sheet,combat,await combatStore.GetProfileAsync(character.Id,ct));
         await progressions.SaveAsync(nextCharacter,state,profile,Event(character,eventType,character.Revision+1,data),ct);
         return sheet with { Revision=character.Revision+1 };
+    }
+    private async Task<PreparedSpell[]> ReplaceSpellsAsync(Character character, ProgressionState state,
+        ClassLevel[] classes, SpellReplacement[] replacements, SpellPreparationMoment moment,
+        string? gainedClassId, CancellationToken ct)
+    {
+        var current = state.PreparedSpells ?? [];
+        if (replacements.Length == 0) return current;
+        var campaign = await campaigns.GetCampaignAsync(character.CampaignId,ct)
+            ?? throw new NotFoundException("Campaign not found.");
+        var catalog = await spellCatalog.GetAsync(campaign.Ruleset,
+            state.SpellPackVersion ?? SpellPackVersions.Initial,ct);
+        return SpellPreparation.Replace(current,classes,catalog,replacements,moment,gainedClassId);
     }
     private async Task<(Character Character,ProgressionState State,CharacterRules Rules,CombatContent Combat)> Load(Guid id,CancellationToken ct)
     {

@@ -120,10 +120,15 @@ public class ApiTests
             speciesVariantId=(string?)null,size="Medium",backgroundId="criminal",classId="cleric",
             baseAbilities=new { Strength=13,Dexterity=13,Constitution=13,Intelligence=13,Wisdom=13,Charisma=13 },
             backgroundBonuses=new { Dexterity=2,Constitution=1 },classSkills=new[]{"history","insight"},
-            preparedSpellIds=new[]{"healing-word"}
+            preparedSpellIds=new[]{"cure-wounds"}
         });
         Assert.Equal("2",sheet.GetProperty("spellPackVersion").GetString());
         var id=sheet.GetProperty("id").GetGuid();
+        sheet=(await Post(client,$"/characters/{id}/rests/long",new {
+            expectedRevision=sheet.GetProperty("revision").GetInt64(),
+            spellReplacements=new[]{new { classId="cleric",fromSpellId="cure-wounds",toSpellId="healing-word" }}
+        })).GetProperty("sheet");
+        Assert.Equal("healing-word",sheet.GetProperty("preparedSpells")[0].GetProperty("spellId").GetString());
         await Post(client,$"/characters/{id}/damage",new { amount=8 });
         sheet=await client.GetFromJsonAsync<JsonElement>($"/characters/{id}/sheet");
         var result=await Post(client,$"/characters/{id}/spells/cast-self",new {

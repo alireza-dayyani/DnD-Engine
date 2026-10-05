@@ -197,6 +197,71 @@ public sealed class ProgressionIntegrationTests
     }
 
     [Fact]
+    public async Task ClericReplacesPreparedSpellOnLongRestAndChoicePersists()
+    {
+        var path=Path.Combine(Path.GetTempPath(),"DndEngine.SpellRestTests",Guid.NewGuid().ToString("N"));
+        Guid id;
+        await using(var provider=Provider(path,2,3))
+        {
+            await provider.InitializeDndEngineAsync();
+            await using var scope=provider.CreateAsyncScope();
+            var services=scope.ServiceProvider;
+            var campaign=await services.GetRequiredService<CampaignService>().CreateAsync(new("Spell rest test"));
+            var request=new CreateSrdCharacter(campaign.Id,"Elen","dwarf",null,"Medium","criminal","cleric",
+                Enum.GetValues<Ability>().ToDictionary(a=>a,_=>13),
+                new() { [Ability.Dexterity]=2,[Ability.Constitution]=1 },["history","insight"],
+                PreparedSpellIds:["cure-wounds"]);
+            var service=services.GetRequiredService<ProgressionService>();
+            var sheet=await service.CreateAsync(request);
+            id=sheet.Id;
+            var rest=await service.LongRestAsync(id,new(sheet.Revision,SpellReplacements:[
+                new("cleric","cure-wounds","healing-word")]));
+            sheet=rest.Sheet;
+            Assert.Contains("Prepared spells replaced",rest.OtherChanges);
+            Assert.Equal("healing-word",Assert.Single(sheet.PreparedSpells!).SpellId);
+            await Assert.ThrowsAsync<RuleViolation>(()=>service.CastPreparedSpellAsync(id,
+                new("cleric","cure-wounds",SpellSlotPoolKind.Shared,1,sheet.Revision,true)));
+            await services.GetRequiredService<MechanicsService>().DamageAsync(id,new(6));
+            sheet=await service.SheetAsync(id);
+            var cast=await service.CastPreparedSpellAsync(id,
+                new("cleric","healing-word",SpellSlotPoolKind.Shared,1,sheet.Revision,true));
+            Assert.Equal([2,3],cast.Rolls);
+            Assert.Equal(6,cast.HitPointsRegained);
+        }
+        await using(var provider=Provider(path))
+        {
+            await provider.InitializeDndEngineAsync();
+            await using var scope=provider.CreateAsyncScope();
+            var sheet=await scope.ServiceProvider.GetRequiredService<ProgressionService>().SheetAsync(id);
+            Assert.Equal("healing-word",Assert.Single(sheet.PreparedSpells!).SpellId);
+            Assert.Equal(1,sheet.Spellcasting!.SharedSlots.Single().Current);
+        }
+    }
+
+    [Fact]
+    public async Task BardReplacesSpellOnBardLevelNotLongRest()
+    {
+        var path=Path.Combine(Path.GetTempPath(),"DndEngine.BardSpellTests",Guid.NewGuid().ToString("N"));
+        await using var provider=Provider(path);
+        await provider.InitializeDndEngineAsync();
+        await using var scope=provider.CreateAsyncScope();
+        var services=scope.ServiceProvider;
+        var campaign=await services.GetRequiredService<CampaignService>().CreateAsync(new("Bard spell test"));
+        var service=services.GetRequiredService<ProgressionService>();
+        var bard=(await service.ChoicesAsync()).Classes.Single(x=>x.Id=="bard");
+        var request=new CreateSrdCharacter(campaign.Id,"Elen","dwarf",null,"Medium","criminal","bard",
+            Enum.GetValues<Ability>().ToDictionary(a=>a,_=>13),
+            new() { [Ability.Dexterity]=2,[Ability.Constitution]=1 },["arcana","insight","perception"],
+            ClassTools:bard.ToolChoiceOptions!.Take(3).ToArray(),PreparedSpellIds:["cure-wounds"]);
+        var sheet=await service.CreateAsync(request);
+        await Assert.ThrowsAsync<RuleViolation>(()=>service.LongRestAsync(sheet.Id,
+            new(sheet.Revision,SpellReplacements:[new("bard","cure-wounds","healing-word")])));
+        sheet=await service.LevelUpAsync(sheet.Id,new("bard",sheet.Revision,
+            SpellReplacement:new("bard","cure-wounds","healing-word")));
+        Assert.Equal("healing-word",Assert.Single(sheet.PreparedSpells!).SpellId);
+    }
+
+    [Fact]
     public async Task CreationProgressionRestAndRestartRetainDerivedState()
     {
         var path=Path.Combine(Path.GetTempPath(),"DndEngine.ProgressionTests",Guid.NewGuid().ToString("N"));
