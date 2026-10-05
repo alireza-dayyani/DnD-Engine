@@ -1,13 +1,15 @@
 using DndEngine.Domain;
 using DndEngine.Domain.Combat;
+using DndEngine.Domain.Progression;
 
 namespace DndEngine.Application;
 
 public sealed class CombatService(ICampaignStore campaigns, ICombatStore store, ICombatCatalog catalog, IDiceRoller dice, TimeProvider clock,
-    IProgressionStore? progressions = null)
+    IProgressionStore? progressions = null, ISpellCatalog? spellCatalog = null)
 {
     private sealed record Session(CombatEncounter Encounter, Campaign Campaign, CombatContent Content,
-        Dictionary<Guid, Character> Characters, Dictionary<Guid, CombatProfile> Profiles, List<CampaignEvent> Events);
+        Dictionary<Guid, Character> Characters, Dictionary<Guid, CombatProfile> Profiles, List<CampaignEvent> Events,
+        Dictionary<Guid, ProgressionState> ProgressionUpdates);
 
     public async Task<CombatContent> ContentAsync(Guid campaignId, CancellationToken ct = default) =>
         await catalog.GetAsync((await Campaign(campaignId, ct)).Ruleset, ct);
@@ -90,14 +92,98 @@ public sealed class CombatService(ICampaignStore campaigns, ICombatStore store, 
             var profile = s.Profiles[actor.CharacterId]; var weapon = profile.Weapon(request.Attack.WeaponId);
             var result = new WeaponAttackResolver(dice).Resolve(s.Encounter, actor.Id, s.Characters[actor.CharacterId], profile,
                 s.Characters[target.CharacterId], s.Profiles[target.CharacterId], s.Content.Weapons.Single(x => x.Id == weapon.DefinitionId), request.Attack);
+            if (result.Damage is { AppliedDamage: > 0 }) CheckConcentration(s,target.Id,result.Damage.AppliedDamage);
             ReleaseGrapples(s);
             return result;
         }, ct);
+    public async Task<CombatCommandResult<CombatSpellResolution>> CastSpellAsync(Guid id, CastCombatSpell request, CancellationToken ct = default)
+    {
+        if (progressions is null || spellCatalog is null) throw new RuleViolation("Spellcasting is not installed.");
+        var s = await Load(id,ct);
+        if (s.Encounter.State.Revision != request.ExpectedRevision)
+            throw new StateConflictException("Encounter revision changed. Reload before casting.");
+        var actor = s.Encounter.RequireTurn(request.CombatantId);
+        var caster = s.Characters[actor.CharacterId];
+        var profile = s.Profiles[caster.Id];
+        var state = await progressions.GetAsync(caster.Id,ct)
+            ?? throw new RuleViolation("Caster has no spellcasting progression.");
+        var spell = (await spellCatalog.GetAsync(s.Campaign.Ruleset,
+            state.SpellPackVersion ?? SpellPackVersions.Initial,ct))
+            .SingleOrDefault(x => x.Id == request.SpellId) ?? throw new RuleViolation("Spell is not in the pinned pack.");
+        var granted = FeatureSpells.AlwaysPrepared(state)
+            .Any(x => x.ClassId == request.ClassId && x.SpellId == spell.Id);
+        var arcanumKnown = request.ClassId == "warlock" &&
+            (state.MysticArcanumChoices ?? []).TryGetValue(spell.Level,out var arcanumId) && arcanumId == spell.Id;
+        if ((!spell.ClassIds.Contains(request.ClassId) && !granted) ||
+            !(spell.Level == 0 ? (state.KnownCantrips ?? []).Any(x => x.ClassId == request.ClassId && x.SpellId == spell.Id)
+                : (state.PreparedSpells ?? []).Any(x => x.ClassId == request.ClassId && x.SpellId == spell.Id) || granted || arcanumKnown))
+            throw new RuleViolation("Spell is not known or prepared for this class.");
+        if (request.Metamagic is not null && request.ClassId != "sorcerer")
+            throw new RuleViolation("Metamagic requires a Sorcerer spell.");
+        var castState = request.Metamagic is { } option ? SorceryPoints.Spend(state,option) : state;
+        var subtle = request.Metamagic == MetamagicOption.SubtleSpell;
+        if (!subtle && (spell.Components.Contains('V') && !request.VerbalAvailable ||
+            spell.Components.Contains('S') && !request.SomaticAvailable) ||
+            spell.Components.Contains('M') && (spell.MaterialCostGp > 0 || !subtle) && !request.MaterialAvailable)
+            throw new RuleViolation("Required spell components are unavailable.");
+        if (profile.State.Capabilities.UntrainedArmorPenalty)
+            throw new RuleViolation("Untrained armor prevents spellcasting.");
+        var casting = SpellSlotCalculator.Derive(caster,state)?.Classes.SingleOrDefault(x => x.ClassId == request.ClassId)
+            ?? throw new RuleViolation("Class has no spellcasting feature.");
+        SpellSlotUsage? usage = null; int? slotBefore = null;
+        if (spell.Level == 0)
+        {
+            if (request.SpellLevel != 0 || request.Pool is not null)
+                throw new RuleViolation("Cantrips use no spell slot.");
+        }
+        else if (arcanumKnown)
+        {
+            if (request.Pool is not null || request.SpellLevel != spell.Level)
+                throw new RuleViolation("Mystic Arcanum casts at its own level without a slot.");
+            castState = MysticArcanum.Spend(castState,spell.Level,spell.Id);
+        }
+        else
+        {
+            if (request.Pool is null || request.SpellLevel < spell.Level)
+                throw new RuleViolation("A spell of level 1+ requires an eligible slot.");
+            (usage,slotBefore) = SpellSlotCalculator.Spend(caster,state,request.Pool.Value,request.SpellLevel);
+        }
+        var quickened = request.Metamagic == MetamagicOption.QuickenedSpell;
+        if (quickened && spell.CastingTime != "Action")
+            throw new RuleViolation("Quickened Spell requires an Action casting time.");
+        var resources = s.Encounter.UseMagic(actor.Id,Effects(s,actor.Id),
+            quickened ? "Bonus Action" : spell.CastingTime,spell.Level > 0 && !arcanumKnown,quickened);
+        var targets = new SpellCombatResolver(dice).Resolve(s.Encounter,actor.Id,caster,profile,
+            s.Characters,s.Profiles,spell,casting,request.Targets,request.SpellLevel,
+            request.AreaCenterDistanceFeet);
+        ActiveSpellEffect? activeEffect = null;
+        if (spell.ConcentrationTurns > 0)
+        {
+            if (targets.Length != 1) throw new RuleViolation("Concentration target must be singular.");
+            var replaced = s.Encounter.ActiveSpells.SingleOrDefault(x => x.CasterCombatantId == actor.Id);
+            activeEffect = s.Encounter.StartConcentration(actor.Id,targets[0].CombatantId,spell.Id,
+                spell.ConcentrationTurns);
+            if (replaced is not null)
+                Emit(s,"ConcentrationEnded",new { Effect=replaced,Reason="replaced" },actor.Id);
+        }
+        foreach (var target in targets.Where(x => x.Damage is { AppliedDamage: > 0 }))
+            CheckConcentration(s,target.CombatantId,target.Damage!.AppliedDamage);
+        if (usage is not null || request.Metamagic is not null || arcanumKnown)
+            s.ProgressionUpdates.Add(caster.Id,castState with { SpellSlots=usage ?? state.SpellSlots });
+        ReleaseGrapples(s);
+        return await Save(s,"CombatSpellCast",new CombatSpellResolution(request.ClassId,spell.Id,
+            request.SpellLevel,request.Pool,slotBefore,resources,targets,activeEffect,
+            request.Metamagic,request.Metamagic is null ? null : SorceryPoints.Remaining(castState),
+            arcanumKnown),ct,actor.Id);
+    }
     public Task<CombatCommandResult<EncounterState>> EndTurnAsync(Guid id, CombatActor request, CancellationToken ct = default) =>
         Execute(id, "TurnAdvanced", s => {
             s.Encounter.RequireTurn(request.CombatantId);
             Emit(s, "TurnEnded", new { request.CombatantId }); Expire(s, ExpiryBoundary.TurnEnd);
+            var active = s.Encounter.ActiveSpells;
             var round = s.Encounter.State.Round; s.Encounter.EndTurn(request.CombatantId);
+            foreach (var spell in active.Except(s.Encounter.ActiveSpells))
+                Emit(s,"SpellEffectExpired",spell,spell.CasterCombatantId);
             if (s.Encounter.State.Round != round) Emit(s, "RoundStarted", new { s.Encounter.State.Round });
             StartTurn(s); return s.Encounter.State;
         }, ct);
@@ -155,25 +241,57 @@ public sealed class CombatService(ICampaignStore campaigns, ICombatStore store, 
                 s.Characters.TryGetValue(source, out var character) && !new ConditionEffects(character, s.Profiles[source]).CanAct).ToArray())
             { profile.RemoveCondition(condition.Id); Emit(s, "ConditionRemoved", new { profile.State.CharacterId, Condition = condition, Reason = "Grappler incapacitated" }); }
     }
+    private void CheckConcentration(Session s,Guid damagedCombatantId,int damage)
+    {
+        if (!s.Encounter.ActiveSpells.Any(x => x.CasterCombatantId == damagedCombatantId)) return;
+        var member = s.Encounter.Combatant(damagedCombatantId);
+        var character = s.Characters[member.CharacterId];
+        var effects = Effects(s,damagedCombatantId);
+        if (!effects.CanAct)
+        {
+            var ended = s.Encounter.EndConcentration(damagedCombatantId);
+            Emit(s,"ConcentrationEnded",new { Effect=ended,Reason="incapacitated" },damagedCombatantId);
+            return;
+        }
+        var dc = Math.Max(10,damage/2);
+        var modifier = character.AbilityModifier(Ability.Constitution) +
+            (character.SavingThrowProficiencies.Contains(Ability.Constitution) ? character.Level.ProficiencyBonus : 0) +
+            effects.D20Penalty;
+        var roll = D20Roll.Make(dice,modifier,false,false);
+        var success = roll.Total >= dc;
+        Emit(s,"ConcentrationChecked",new { Damage=damage,Dc=dc,Roll=roll,Success=success },damagedCombatantId);
+        if (!success)
+        {
+            var ended = s.Encounter.EndConcentration(damagedCombatantId);
+            Emit(s,"ConcentrationEnded",new { Effect=ended,Reason="failed save" },damagedCombatantId);
+        }
+    }
     private static ConditionEffects Effects(Session s, Guid memberId)
     { var member = s.Encounter.Combatant(memberId); return new(s.Characters[member.CharacterId], s.Profiles[member.CharacterId]); }
     private async Task<CombatCommandResult<T>> Execute<T>(Guid id, string type, Func<Session, T> command, CancellationToken ct, Guid? subject = null)
     { var s = await Load(id, ct); var result = command(s); return await Save(s, type, result, ct, subject); }
     private async Task<CombatCommandResult<T>> Save<T>(Session s, string type, T result, CancellationToken ct, Guid? subject = null)
     {
+        foreach (var effect in s.Encounter.ActiveSpells.ToArray())
+            if (!Effects(s,effect.CasterCombatantId).CanAct)
+            {
+                s.Encounter.EndConcentration(effect.CasterCombatantId);
+                Emit(s,"ConcentrationEnded",new { Effect=effect,Reason="incapacitated" },effect.CasterCombatantId);
+            }
         foreach (var member in s.Encounter.State.Combatants)
         {
             var effects = Effects(s, member.Id);
             if (member.Resources.Dodging && (!effects.CanAct || effects.Speed == 0)) s.Encounter.SetResources(member.Id, member.Resources with { Dodging = false });
         }
         // The HTTP/event snapshot should carry the committed revision, like the outer result.
-        if (result is EncounterState state) result = (T)(object)(state with { Revision = s.Encounter.State.Revision + 1 });
+        if (result is EncounterState) result = (T)(object)(s.Encounter.State with { Revision = s.Encounter.State.Revision + 1 });
         Emit(s, type, result, subject);
         if (type == "CombatStarted")
         {
             var started = s.Events[^1]; s.Events.RemoveAt(s.Events.Count - 1); s.Events.Insert(0, started);
         }
-        await store.SaveEncounterAsync(s.Encounter, s.Characters.Values.ToArray(), s.Profiles.Values.ToArray(), s.Events, false, ct);
+        await store.SaveEncounterAsync(s.Encounter, s.Characters.Values.ToArray(), s.Profiles.Values.ToArray(), s.Events, false, ct,
+            s.ProgressionUpdates);
         return new(s.Encounter.State.Id, s.Encounter.State.Revision + 1, s.Encounter.State.Round, s.Encounter.State.TurnNumber, result);
     }
     private void Emit<T>(Session s, string type, T data, Guid? subject = null) => s.Events.Add(Event(s.Campaign, type,
@@ -189,7 +307,7 @@ public sealed class CombatService(ICampaignStore campaigns, ICombatStore store, 
         // Read each character revision BEFORE its profile; subsequent writes guard the complete read set.
         foreach (var member in encounter.State.Combatants)
         { characters.Add(member.CharacterId, await Character(member.CharacterId, ct)); profiles.Add(member.CharacterId, await Profile(member.CharacterId, ct)); }
-        return new(encounter, campaign, content, characters, profiles, []);
+        return new(encounter, campaign, content, characters, profiles, [],new());
     }
     private async Task<Campaign> Campaign(Guid id, CancellationToken ct)
     { var result = await campaigns.GetCampaignAsync(id, ct) ?? throw new NotFoundException("Campaign not found."); result.Ruleset.RequireSupported(); return result; }

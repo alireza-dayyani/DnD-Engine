@@ -4,6 +4,7 @@ using System.Text.Json;
 using DndEngine.Application;
 using DndEngine.Domain;
 using DndEngine.Domain.Progression;
+using DndEngine.Domain.Combat;
 using Microsoft.EntityFrameworkCore;
 
 namespace DndEngine.Infrastructure;
@@ -55,16 +56,38 @@ public sealed class SpellCatalog(RulesDbContext db) : ISpellCatalog
             ["bard","cleric","druid","paladin","ranger"],"Action","Touch","V,S",
             SpellEffectKind.SelfHealing,"SRD 5.2.1 p. 121")];
         await ImportInitialAsync(db,JsonSerializer.Serialize(initial,CombatCatalog.Json),ct);
-        SpellDefinition[] current = [
+        SpellDefinition[] previous = [
             new("cure-wounds","Cure Wounds",1,["bard","cleric","druid","paladin","ranger"],
                 "Action","Touch","V,S",SpellEffectKind.SelfHealing,"SRD 5.2.1 p. 121",2,8),
             new("healing-word","Healing Word",1,["bard","cleric","druid"],
                 "Bonus Action","60 feet","V",SpellEffectKind.SelfHealing,"SRD 5.2.1 p. 139",2,4)
         ];
-        var json = JsonSerializer.Serialize(current,CombatCatalog.Json);
+        await ImportPackAsync(db,SpellPackVersions.Previous,previous,ct);
+        SpellDefinition[] current = [..previous,
+            new("fire-bolt","Fire Bolt",0,["sorcerer","wizard"],"Action","120 feet","V,S",
+                SpellEffectKind.SpellAttack,"SRD 5.2.1 p. 131",Damage:new(DamageType.Fire,1,10)),
+            new("sacred-flame","Sacred Flame",0,["cleric"],"Action","60 feet","V,S",
+                SpellEffectKind.SavingThrowDamage,"SRD 5.2.1 p. 158",Damage:new(DamageType.Radiant,1,8,Ability.Dexterity,
+                    IgnoreCover:true)),
+            new("burning-hands","Burning Hands",1,["sorcerer","wizard"],"Action","Self (15-foot Cone)","V,S",
+                SpellEffectKind.SavingThrowDamage,"SRD 5.2.1 p. 116",Damage:new(DamageType.Fire,3,6,
+                Ability.Dexterity,1,HalfOnSave:true,Area:true)),
+            new("blur","Blur",2,["sorcerer","wizard"],"Action","Self","V",
+                SpellEffectKind.Blur,"SRD 5.2.1 p. 114",ConcentrationTurns:10),
+            new("circle-of-death","Circle of Death",6,["sorcerer","warlock","wizard"],"Action",
+                "150 feet","V,S,M",SpellEffectKind.SavingThrowDamage,"SRD 5.2.1 p. 115",
+                Damage:new(DamageType.Necrotic,8,8,Ability.Constitution,2,HalfOnSave:true,Area:true),
+                MaterialCostGp:500)
+        ];
+        await ImportPackAsync(db,SpellPackVersions.Current,current,ct);
+    }
+
+    private static async Task ImportPackAsync(RulesDbContext db,string version,SpellDefinition[] spells,CancellationToken ct)
+    {
+        var json = JsonSerializer.Serialize(spells,CombatCatalog.Json);
         var hash = Hash(json);
         var pack = await db.SpellPacks.SingleOrDefaultAsync(x => x.RulesetId == Ruleset.Current.Id &&
-            x.RulesetVersion == Ruleset.Current.Version && x.PackVersion == SpellPackVersions.Current,ct);
+            x.RulesetVersion == Ruleset.Current.Version && x.PackVersion == version,ct);
         if (pack is not null)
         {
             if (pack.ContentHash != hash || pack.DataJson != json)
@@ -72,7 +95,7 @@ public sealed class SpellCatalog(RulesDbContext db) : ISpellCatalog
             return;
         }
         db.SpellPacks.Add(new() { RulesetId=Ruleset.Current.Id,RulesetVersion=Ruleset.Current.Version,
-            PackVersion=SpellPackVersions.Current,ContentHash=hash,DataJson=json });
+            PackVersion=version,ContentHash=hash,DataJson=json });
         await db.SaveChangesAsync(ct);
     }
 

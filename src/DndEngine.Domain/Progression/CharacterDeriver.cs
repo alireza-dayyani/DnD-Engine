@@ -196,7 +196,10 @@ public static class CharacterDeriver
             armorClass,speed,proficiencies.ToArray(),features.ToArray(),state.FeatIds,state.Resources, state.Inventory,
             state.MasteredWeaponIds,capabilities,state.SubclassIds,abilityBreakdowns,new(speed,speedParts.ToArray()),
             untrainedArmor,untrainedArmor,darkvision,SpellSlotCalculator.Derive(character,state),state.PreparedSpells ?? [],
-            state.SpellPackVersion ?? SpellPackVersions.Initial);
+            state.SpellPackVersion ?? SpellPackVersions.Initial,state.KnownCantrips ?? [],state.WizardSpellbookIds ?? [],
+            state.MetamagicOptions ?? [],SorceryPoints.Remaining(state),SorceryPoints.Maximum(state),
+            FeatureSpells.AlwaysPrepared(state),state.MysticArcanumChoices ?? [],
+            state.MysticArcanumSpentLevels ?? []);
     }
 
     public static ItemDefinition FindItem(string id, CharacterRules rules, CombatContent combat) =>

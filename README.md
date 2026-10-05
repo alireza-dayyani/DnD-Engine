@@ -1,6 +1,6 @@
 # D&D campaign engine — Phase 4 foundation
 
-A local .NET 10 backend for SRD 5.2.1 character choices and progression, weapon combat, persistent campaign state, and an audit timeline. A future AI Dungeon Master supplies interpretation and narration; the engine owns dice and state. Phase 4 now includes derived spellcasting, durable slot expenditure, and two prepared self-healing spells. Broader spellcasting is still in progress; there are no AI calls, MCP or graphical UI.
+A local .NET 10 backend for SRD 5.2.1 character choices and progression, weapon combat, persistent campaign state, and an audit timeline. A future AI Dungeon Master supplies interpretation and narration; the engine owns dice and state. Phase 4 delivers a bounded seven-spell magic engine with versioned choices, combat casting and persistent effects. It is not a complete SRD spell implementation. There are no AI calls, MCP or graphical UI.
 
 ## Run
 
@@ -31,7 +31,7 @@ Validated character sheet import; six scores; levels 1–20 and derived proficie
 
 Phase 2 adds encounter lifecycle, shared monster initiative and explicit ties, durable turns/rounds, action/bonus/reaction resources, movement/Dash/Dodge/Disengage, weapon ownership and ammunition, typed attacks/criticals/damage mitigation, source-aware conditions, combat saves, and automatic death saves at turn start. See [combat API and boundaries](docs/COMBAT_API.md).
 
-Phase 3 adds a choice-based path to create an SRD character and derive its mechanical sheet. It models 9 species, 4 backgrounds, 12 classes, feats, levels 1–20, passive feature effects, multiclassing foundations, class resources, armor and inventory, hit dice and rests. Phase 4 derives each casting class's ability, attack bonus and save DC, shared multiclass spell slots, Warlock Pact Magic slots and prepared-spell allowance. Slot expenditure persists and rests restore the applicable pool. The current pinned spell pack contains Cure Wounds and Healing Word; an SRD character can prepare eligible spells at creation, add spells when gaining a class level, replace them at the class-appropriate rest or level-up, and cast them on themselves outside combat. See [character API](docs/CHARACTER_API.md), [Phase 3 report](docs/PHASE3_REPORT.md), and [Phase 4 report](docs/PHASE4_REPORT.md). Many active class/subclass/feat/species powers remain deferred.
+Phase 3 adds a choice-based path to create an SRD character and derive its mechanical sheet. It models 9 species, 4 backgrounds, 12 classes, feats, levels 1–20, passive feature effects, multiclassing foundations, class resources, armor and inventory, hit dice and rests. Phase 4 derives class casting stats, multiclass and Pact Magic slots, and preparation/cantrip limits. The current pack adds two cantrips, area damage, Blur concentration and Mystic Arcanum to the earlier healing spells. Character choices include Wizard books, a Fiend spell grant and two Sorcerer Metamagic options. Combat casting spends the correct turn/resource budget and atomically saves target HP, spell resources and audit events. See [Magic API](docs/MAGIC_API.md), [Phase 3 report](docs/PHASE3_REPORT.md), and [Phase 4 report](docs/PHASE4_REPORT.md). Many active class/subclass/feat/species powers remain deferred.
 
 ## Development API
 
@@ -43,9 +43,11 @@ Phase 3 adds a choice-based path to create an SRD character and derive its mecha
 | GET / POST | `/character-choices`, `/srd-characters` | Read choices/create choice-based SRD character |
 | GET / POST | `/characters/{id}/sheet`, `/characters/{id}/level-up` | Derived sheet and progression |
 | GET | `/characters/{id}/spellcasting` | Casting abilities and current/maximum slot balances |
-| GET | `/spells` | Read the pinned starter spell catalog |
+| GET | `/spells` | Read an immutable spell pack (current pack 3 by default) |
 | POST | `/characters/{id}/spell-slots/spend` | Record one shared or Pact Magic slot expenditure |
 | POST | `/characters/{id}/spells/cast-self` | Cast a prepared self-healing spell on the caster outside combat |
+| POST | `/characters/{id}/spell-pack/adopt` | Explicitly adopt current spell content |
+| POST | `/combat/{id}/spells/cast` | Cast an implemented spell in an active encounter |
 | POST | `/characters/{id}/inventory`, `/inventory/equip`, `/inventory/unequip`, `/inventory/remove` | Acquire and equip items |
 | POST | `/characters/{id}/resources/spend`, `/rests/short`, `/rests/long` | Resource use and recovery |
 | POST | `/characters/{id}/checks/ability` | Plain ability check |
@@ -77,7 +79,7 @@ See `scripts/Smoke.ps1` for a complete character-creation request and executable
 - `src/DndEngine.Infrastructure`: SQLite/EF, migrations, pinned skills/combat/character content importers, random dice.
 - `src/DndEngine.Api`: HTTP development adapter and dependency composition.
 - `tests/`: domain, application, real SQLite, and HTTP tests. All test dice are fixed.
-- [Architecture](docs/ARCHITECTURE.md), [rules sources](docs/RULES_SOURCES.md), [domain model](docs/DOMAIN_MODEL.md), [roadmap](docs/ROADMAP.md), [Phase 1 report](docs/PHASE1_REPORT.md), [Phase 2 report](docs/PHASE2_REPORT.md), [Phase 3 report](docs/PHASE3_REPORT.md), [Phase 4 report](docs/PHASE4_REPORT.md), [combat API](docs/COMBAT_API.md), [character API](docs/CHARACTER_API.md).
+- [Architecture](docs/ARCHITECTURE.md), [rules sources](docs/RULES_SOURCES.md), [domain model](docs/DOMAIN_MODEL.md), [roadmap](docs/ROADMAP.md), [Phase 1 report](docs/PHASE1_REPORT.md), [Phase 2 report](docs/PHASE2_REPORT.md), [Phase 3 report](docs/PHASE3_REPORT.md), [Phase 4 report](docs/PHASE4_REPORT.md), [combat API](docs/COMBAT_API.md), [character API](docs/CHARACTER_API.md), [magic API](docs/MAGIC_API.md).
 
 ## Attribution
 

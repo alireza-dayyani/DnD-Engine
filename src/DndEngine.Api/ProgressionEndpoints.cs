@@ -24,6 +24,7 @@ public static class ProgressionEndpoints
         app.MapPost("/characters/{id:guid}/resources/spend", (Guid id,SpendResource request,ProgressionService service,CancellationToken ct) => service.SpendResourceAsync(id,request,ct));
         app.MapPost("/characters/{id:guid}/spell-slots/spend", (Guid id,SpendSpellSlot request,ProgressionService service,CancellationToken ct) => service.SpendSpellSlotAsync(id,request,ct));
         app.MapPost("/characters/{id:guid}/spells/cast-self", (Guid id,CastPreparedSpell request,ProgressionService service,CancellationToken ct) => service.CastPreparedSpellAsync(id,request,ct));
+        app.MapPost("/characters/{id:guid}/spell-pack/adopt", (Guid id,AdoptSpellPack request,ProgressionService service,CancellationToken ct) => service.AdoptSpellPackAsync(id,request,ct));
         app.MapPost("/characters/{id:guid}/rests/short", (Guid id,ShortRestRequest request,ProgressionService service,CancellationToken ct) => service.ShortRestAsync(id,request,ct));
         app.MapPost("/characters/{id:guid}/rests/long", (Guid id,LongRestRequest request,ProgressionService service,CancellationToken ct) => service.LongRestAsync(id,request,ct));
     }

@@ -1,5 +1,6 @@
 using DndEngine.Domain;
 using DndEngine.Domain.Combat;
+using DndEngine.Domain.Progression;
 
 namespace DndEngine.Application;
 
@@ -14,7 +15,8 @@ public interface ICombatStore
     Task<bool> IsEnrolledAsync(Guid characterId, CancellationToken ct);
     Task SaveProfileAsync(Character character, CombatProfile profile, CampaignEvent entry, CancellationToken ct);
     Task SaveEncounterAsync(CombatEncounter encounter, IReadOnlyList<Character> characters,
-        IReadOnlyList<CombatProfile> profiles, IReadOnlyList<CampaignEvent> events, bool create, CancellationToken ct);
+        IReadOnlyList<CombatProfile> profiles, IReadOnlyList<CampaignEvent> events, bool create, CancellationToken ct,
+        IReadOnlyDictionary<Guid, ProgressionState>? progressionUpdates = null);
 }
 public sealed record CreateCombat(string Name);
 public sealed record AddCombatant(Guid CharacterId, CombatantKind Kind = CombatantKind.PlayerCharacter,
@@ -27,6 +29,10 @@ public sealed record MoveCombatant(Guid CombatantId, int Distance, MovementMode 
     bool DifficultTerrain = false, bool ApproachesFear = false);
 public sealed record TakeCombatAction(Guid CombatantId, CombatAction Action);
 public sealed record AttackCombatant(Guid CombatantId, WeaponAttackOptions Attack);
+public sealed record CastCombatSpell(Guid CombatantId, string ClassId, string SpellId,
+    SpellSlotPoolKind? Pool, int SpellLevel, SpellTargetContext[] Targets,
+    bool VerbalAvailable, bool SomaticAvailable, bool MaterialAvailable, long ExpectedRevision,
+    MetamagicOption? Metamagic = null, int? AreaCenterDistanceFeet = null);
 public sealed record ApplyCombatCondition(Guid CombatantId, ConditionKind Kind, string Source,
     Guid? SourceCharacterId = null, ExpiryBoundary Expiry = ExpiryBoundary.Manual, long? ExpiresOnTurn = null);
 public sealed record CombatSavingThrow(Guid CombatantId, CheckRequest Check);

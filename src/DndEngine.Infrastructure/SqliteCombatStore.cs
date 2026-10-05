@@ -2,6 +2,7 @@ using System.Text.Json;
 using DndEngine.Application;
 using DndEngine.Domain;
 using DndEngine.Domain.Combat;
+using DndEngine.Domain.Progression;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
@@ -48,7 +49,8 @@ public sealed class SqliteCombatStore(CampaignDbContext db) : ICombatStore
         finally { db.ChangeTracker.Clear(); }
     }
     public async Task SaveEncounterAsync(CombatEncounter encounter, IReadOnlyList<Character> characters,
-        IReadOnlyList<CombatProfile> profiles, IReadOnlyList<CampaignEvent> events, bool create, CancellationToken ct)
+        IReadOnlyList<CombatProfile> profiles, IReadOnlyList<CampaignEvent> events, bool create, CancellationToken ct,
+        IReadOnlyDictionary<Guid, ProgressionState>? progressionUpdates = null)
     {
         try
         {
@@ -63,6 +65,11 @@ public sealed class SqliteCombatStore(CampaignDbContext db) : ICombatStore
             }
             foreach (var character in characters) UpdateCharacter(character);
             foreach (var profile in profiles) await UpsertProfile(profile, ct);
+            if (progressionUpdates is not null) foreach (var (characterId, progression) in progressionUpdates)
+            {
+                var progressionRow = await db.Progressions.SingleAsync(x => x.CharacterId == characterId,ct);
+                progressionRow.StateJson = JsonSerializer.Serialize(progression,CombatCatalog.Json);
+            }
             var memberships = await db.CombatMemberships.Where(x => x.EncounterId == state.Id).ToArrayAsync(ct);
             if (state.Status == EncounterStatus.Completed) db.CombatMemberships.RemoveRange(memberships);
             else foreach (var member in state.Combatants.Where(x => memberships.All(m => m.CharacterId != x.CharacterId)))

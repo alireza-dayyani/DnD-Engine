@@ -48,7 +48,10 @@ public sealed record ProgressionState(string SpeciesId, string? SpeciesVariantId
     HitDiePool[] HitDice, ResourceState[] Resources, InventoryItem[] Inventory, string[] MasteredWeaponIds,
     string? SpeciesSkill = null, DateTimeOffset? LastLongRestAtUtc = null, Proficiency[]? ExtraProficiencies = null,
     Dictionary<string,string>? SubclassIds = null, string? BackgroundToolId = null, string[]? ClassTools = null,
-    SpellSlotUsage? SpellSlots = null, PreparedSpell[]? PreparedSpells = null, string? SpellPackVersion = null);
+    SpellSlotUsage? SpellSlots = null, PreparedSpell[]? PreparedSpells = null, string? SpellPackVersion = null,
+    KnownCantrip[]? KnownCantrips = null, string[]? WizardSpellbookIds = null,
+    MetamagicOption[]? MetamagicOptions = null, int SorceryPointsSpent = 0,
+    Dictionary<int,string>? MysticArcanumChoices = null, int[]? MysticArcanumSpentLevels = null);
 
 public sealed record StatisticPart(string Source, int Value);
 public sealed record DerivedStatistic(int Total, StatisticPart[] Parts);
@@ -65,4 +68,8 @@ public sealed record CharacterSheet(Guid Id, Guid CampaignId, string Name, long 
     IReadOnlyDictionary<Ability,DerivedStatistic>? AbilityBreakdowns = null, DerivedStatistic? SpeedBreakdown = null,
     bool UntrainedArmorPenalty = false, bool SpellcastingBlockedByArmor = false, int DarkvisionFeet = 0,
     SpellcastingSummary? Spellcasting = null, PreparedSpell[]? PreparedSpells = null,
-    string SpellPackVersion = SpellPackVersions.Initial);
+    string SpellPackVersion = SpellPackVersions.Initial, KnownCantrip[]? KnownCantrips = null,
+    string[]? WizardSpellbookIds = null, MetamagicOption[]? MetamagicOptions = null,
+    int SorceryPointsCurrent = 0, int SorceryPointsMaximum = 0,
+    PreparedSpell[]? AlwaysPreparedSpells = null,
+    IReadOnlyDictionary<int,string>? MysticArcanumChoices = null, int[]? MysticArcanumSpentLevels = null);

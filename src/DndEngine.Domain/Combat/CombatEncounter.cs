@@ -12,18 +12,23 @@ public sealed record D20Roll(IReadOnlyList<int> Rolls, int SelectedRoll, int Mod
 }
 public sealed record TurnResources(bool ActionUsed = false, int AttacksRemaining = 0, bool BonusActionUsed = false,
     bool ReactionUsed = false, int MovementUsed = 0, int Dashes = 0, bool Dodging = false, bool Disengaging = false,
-    Guid[]? LightWeaponsUsed = null, Guid[]? LoadingWeaponsUsed = null);
+    Guid[]? LightWeaponsUsed = null, Guid[]? LoadingWeaponsUsed = null, bool SpellSlotCast = false,
+    bool QuickenedSpellUsed = false);
 public sealed record CombatantState(Guid Id, Guid CharacterId, CombatantKind Kind, ZeroHpPolicy ZeroHpPolicy,
     bool Surprised, string? InitiativeGroup, D20Roll? Initiative, TurnResources Resources);
 public sealed record EncounterState(Guid Id, Guid CampaignId, string Name, EncounterStatus Status,
-    CombatantState[] Combatants, Guid[] Order, int Round, int TurnIndex, long TurnNumber, long Revision);
+    CombatantState[] Combatants, Guid[] Order, int Round, int TurnIndex, long TurnNumber, long Revision,
+    ActiveSpellEffect[]? ActiveSpells = null);
 public sealed record InitiativeTie(int Total, Guid[] Combatants, string DecidedBy);
 public sealed record InitiativeResult(CombatantState[] Combatants, InitiativeTie[] Ties);
 public sealed record MovementResult(Guid CombatantId, int Distance, MovementMode Mode, bool DifficultTerrain, int Cost, int Speed, int Used, int Remaining);
+public sealed record ActiveSpellEffect(Guid CasterCombatantId, Guid TargetCombatantId, string SpellId,
+    long ExpiresOnTurn);
 
 public sealed class CombatEncounter
 {
     public EncounterState State { get; private set; }
+    public ActiveSpellEffect[] ActiveSpells => State.ActiveSpells ?? [];
     public Guid? CurrentCombatantId => State.Status == EncounterStatus.Active ? State.Order[State.TurnIndex] : null;
     public CombatEncounter(EncounterState state)
     {
@@ -36,6 +41,11 @@ public sealed class CombatEncounter
         if (state.Status == EncounterStatus.Active && (state.Round < 1 || state.Order.Length != state.Combatants.Length ||
             state.TurnIndex < 0 || state.TurnIndex >= state.Order.Length || state.Order.Distinct().Count() != state.Order.Length ||
             state.Order.Any(id => !state.Combatants.Any(x => x.Id == id)))) throw new RuleViolation("Invalid active turn state.");
+        if ((state.ActiveSpells ?? []).Any(x => x.ExpiresOnTurn <= state.TurnNumber ||
+            !state.Combatants.Any(c => c.Id == x.CasterCombatantId) ||
+            !state.Combatants.Any(c => c.Id == x.TargetCombatantId)) ||
+            (state.ActiveSpells ?? []).GroupBy(x => x.CasterCombatantId).Any(x => x.Count() > 1))
+            throw new RuleViolation("Invalid active spell effects.");
         State = state;
     }
     public static CombatEncounter Create(Guid campaignId, string name) => new(new(Guid.NewGuid(), campaignId, Guard.Name(name),
@@ -108,12 +118,13 @@ public sealed class CombatEncounter
         SetResources(actor, old.Resources with { Disengaging = false });
         var index = (State.TurnIndex + 1) % State.Order.Length;
         State = State with { TurnIndex = index, Round = State.Round + (index == 0 ? 1 : 0), TurnNumber = checked(State.TurnNumber + 1) };
+        State = State with { ActiveSpells = ActiveSpells.Where(x => x.ExpiresOnTurn > State.TurnNumber).ToArray() };
         ResetCurrentTurn();
     }
     private void ResetCurrentTurn() => SetResources(CurrentCombatantId!.Value, new());
     public void Complete()
     {
-        RequireActive(); State = State with { Status = EncounterStatus.Completed };
+        RequireActive(); State = State with { Status = EncounterStatus.Completed, ActiveSpells = [] };
     }
     public void SetResources(Guid id, TurnResources resources) => State = State with {
         Combatants = State.Combatants.Select(x => x.Id == id ? x with { Resources = resources } : x).ToArray() };
@@ -150,4 +161,43 @@ public sealed class CombatEncounter
             Dodging = action == CombatAction.Dodge && effects.Speed > 0,
             Disengaging = action == CombatAction.Disengage });
     }
+
+    public TurnResources UseMagic(Guid actor, ConditionEffects effects, string castingTime, bool usesSlot,
+        bool quickened = false)
+    {
+        var c = RequireTurn(actor); effects.RequireAction();
+        var resources = c.Resources;
+        if (usesSlot && (resources.SpellSlotCast || resources.QuickenedSpellUsed) ||
+            quickened && resources.SpellSlotCast)
+            throw new RuleViolation("Only one spell slot can be expended to cast a spell on a turn.");
+        resources = castingTime switch
+        {
+            "Action" when !resources.ActionUsed => resources with { ActionUsed = true, AttacksRemaining = 0 },
+            "Bonus Action" when !resources.BonusActionUsed => resources with { BonusActionUsed = true },
+            _ => throw new RuleViolation("Casting time is unavailable on this turn.")
+        };
+        resources = resources with { SpellSlotCast = resources.SpellSlotCast || usesSlot,
+            QuickenedSpellUsed = resources.QuickenedSpellUsed || quickened };
+        SetResources(actor,resources);
+        return resources;
+    }
+
+    public ActiveSpellEffect StartConcentration(Guid caster, Guid target, string spellId, int rounds)
+    {
+        RequireTurn(caster);
+        if (rounds < 1 || rounds > 600 || !State.Combatants.Any(x => x.Id == target))
+            throw new RuleViolation("Invalid concentrating spell duration or target.");
+        var effect = new ActiveSpellEffect(caster,target,spellId,
+            checked(State.TurnNumber + (long)rounds * State.Order.Length));
+        State = State with { ActiveSpells = [..ActiveSpells.Where(x => x.CasterCombatantId != caster),effect] };
+        return effect;
+    }
+    public ActiveSpellEffect? EndConcentration(Guid caster)
+    {
+        var effect = ActiveSpells.SingleOrDefault(x => x.CasterCombatantId == caster);
+        if (effect is not null) State = State with { ActiveSpells=ActiveSpells.Where(x => x != effect).ToArray() };
+        return effect;
+    }
+    public bool HasSpellEffect(Guid target,string spellId) =>
+        ActiveSpells.Any(x => x.TargetCombatantId == target && x.SpellId == spellId);
 }

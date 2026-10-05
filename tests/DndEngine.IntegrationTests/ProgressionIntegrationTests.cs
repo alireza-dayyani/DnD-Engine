@@ -116,7 +116,7 @@ public sealed class ProgressionIntegrationTests
             Assert.Contains(sheet.PreparedSpells!,x=>x.SpellId=="cure-wounds");
             var events=await services.GetRequiredService<CampaignService>().EventsAsync(sheet.CampaignId);
             Assert.Contains(events,x=>x.Type=="SpellCast");
-            Assert.Equal(2,(await service.SpellChoicesAsync()).Length);
+            Assert.Equal(7,(await service.SpellChoicesAsync()).Length);
         }
     }
 
@@ -153,13 +153,27 @@ public sealed class ProgressionIntegrationTests
             Assert.Equal(SpellPackVersions.Initial,sheet.SpellPackVersion);
             var catalog=services.GetRequiredService<ISpellCatalog>();
             Assert.Single(await catalog.GetAsync(Ruleset.Current,SpellPackVersions.Initial,default));
-            Assert.Equal(2,(await catalog.GetAsync(Ruleset.Current,SpellPackVersions.Current,default)).Length);
+            Assert.Equal(7,(await catalog.GetAsync(Ruleset.Current,SpellPackVersions.Current,default)).Length);
             await services.GetRequiredService<MechanicsService>().DamageAsync(id,new(6));
             sheet=await service.SheetAsync(id);
             var cast=await service.CastPreparedSpellAsync(id,
                 new("cleric","cure-wounds",SpellSlotPoolKind.Shared,1,sheet.Revision,true));
             Assert.Equal(6,cast.HitPointsRegained);
             Assert.Equal(SpellPackVersions.Initial,cast.Sheet.SpellPackVersion);
+            var adopted=await service.AdoptSpellPackAsync(id,new(SpellPackVersions.Current,
+                cast.Sheet.Revision,[new("cleric","sacred-flame")]));
+            Assert.Equal(SpellPackVersions.Current,adopted.SpellPackVersion);
+            Assert.Contains(adopted.KnownCantrips!,x=>x.ClassId=="cleric" && x.SpellId=="sacred-flame");
+            Assert.Contains(adopted.PreparedSpells!,x=>x.SpellId=="cure-wounds");
+        }
+        await using(var provider=Provider(path))
+        {
+            await provider.InitializeDndEngineAsync();
+            await using var scope=provider.CreateAsyncScope();
+            var sheet=await scope.ServiceProvider.GetRequiredService<ProgressionService>().SheetAsync(id);
+            Assert.Equal(SpellPackVersions.Current,sheet.SpellPackVersion);
+            Assert.Contains(sheet.KnownCantrips!,x=>x.SpellId=="sacred-flame");
+            Assert.Contains(sheet.PreparedSpells!,x=>x.SpellId=="cure-wounds");
         }
     }
 
@@ -191,7 +205,7 @@ public sealed class ProgressionIntegrationTests
             await using var scope=provider.CreateAsyncScope();
             var rules=scope.ServiceProvider.GetRequiredService<RulesDbContext>();
             Assert.Equal(initialHash,(await rules.SpellContent.SingleAsync()).ContentHash);
-            Assert.Single(await rules.SpellPacks.ToArrayAsync());
+            Assert.Equal(2,(await rules.SpellPacks.ToArrayAsync()).Length);
             Assert.False(rules.Database.HasPendingModelChanges());
         }
     }

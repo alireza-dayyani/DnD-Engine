@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using DndEngine.Domain;
+using DndEngine.Domain.Progression;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
@@ -122,7 +123,7 @@ public class ApiTests
             backgroundBonuses=new { Dexterity=2,Constitution=1 },classSkills=new[]{"history","insight"},
             preparedSpellIds=new[]{"cure-wounds"}
         });
-        Assert.Equal("2",sheet.GetProperty("spellPackVersion").GetString());
+        Assert.Equal(SpellPackVersions.Current,sheet.GetProperty("spellPackVersion").GetString());
         var id=sheet.GetProperty("id").GetGuid();
         sheet=(await Post(client,$"/characters/{id}/rests/long",new {
             expectedRevision=sheet.GetProperty("revision").GetInt64(),
@@ -145,6 +146,53 @@ public class ApiTests
         Assert.Equal(2,result.GetProperty("rolls").GetArrayLength());
         Assert.Equal(2,result.GetProperty("sheet").GetProperty("spellcasting")
             .GetProperty("sharedSlots")[0].GetProperty("current").GetInt32());
+    }
+    [Fact]
+    public async Task HttpCombatMagicCastsKnownCantripAndRejectsStaleEncounterRevision()
+    {
+        await using var app=new Factory(18,2,1,5); using var client=app.CreateClient();
+        var campaign=await Post(client,"/campaigns",new { name="Combat Magic API" });
+        var campaignId=campaign.GetProperty("id").GetGuid();
+        var cleric=await Post(client,"/srd-characters",new {
+            campaignId,name="Elen",speciesId="dwarf",speciesVariantId=(string?)null,size="Medium",
+            backgroundId="criminal",classId="cleric",
+            baseAbilities=new { Strength=13,Dexterity=13,Constitution=13,Intelligence=13,Wisdom=13,Charisma=13 },
+            backgroundBonuses=new { Dexterity=2,Constitution=1 },classSkills=new[]{"history","insight"},
+            knownCantripIds=new[]{"sacred-flame"}
+        });
+        var enemy=await Post(client,"/characters",new { campaignId,name="Enemy",level=1,
+            abilities=new { Strength=10,Dexterity=10,Constitution=10,Intelligence=10,Wisdom=10,Charisma=10 },
+            skillProficiencies=Array.Empty<string>(),savingThrowProficiencies=Array.Empty<string>(),maximumHp=20,armorClass=10 });
+        var enemyId=enemy.GetProperty("id").GetGuid();
+        using(var imported=await client.PutAsJsonAsync($"/characters/{enemyId}/combat-profile",new {
+            speed=30,weaponProficiencies=Array.Empty<string>(),resistances=Array.Empty<string>(),
+            immunities=Array.Empty<string>(),vulnerabilities=Array.Empty<string>(),conditionImmunities=Array.Empty<string>() }))
+            imported.EnsureSuccessStatusCode();
+        var encounter=await Post(client,$"/campaigns/{campaignId}/combat",new { name="Duel" });
+        var encounterId=encounter.GetProperty("id").GetGuid();
+        var actor=(await Post(client,$"/combat/{encounterId}/combatants",new {
+            characterId=cleric.GetProperty("id").GetGuid() })).GetProperty("result").GetProperty("id").GetGuid();
+        var target=(await Post(client,$"/combat/{encounterId}/combatants",new {
+            characterId=enemyId,kind="Monster",zeroHpPolicy="Die" })).GetProperty("result").GetProperty("id").GetGuid();
+        await Post(client,$"/combat/{encounterId}/initiative",new { });
+        await Post(client,$"/combat/{encounterId}/start",new { });
+        var view=await client.GetFromJsonAsync<JsonElement>($"/combat/{encounterId}");
+        var revision=view.GetProperty("encounter").GetProperty("revision").GetInt64();
+        var cast=await Post(client,$"/combat/{encounterId}/spells/cast",new {
+            combatantId=actor,classId="cleric",spellId="sacred-flame",pool=(string?)null,spellLevel=0,
+            targets=new[]{new { combatantId=target,distanceFeet=30,casterCanSeeTarget=true,
+                targetCanSeeCaster=true,cover="Half" }},verbalAvailable=true,somaticAvailable=true,
+            materialAvailable=false,expectedRevision=revision
+        });
+        Assert.Equal(5,cast.GetProperty("result").GetProperty("targets")[0]
+            .GetProperty("damage").GetProperty("appliedDamage").GetInt32());
+        using var stale=await client.PostAsJsonAsync($"/combat/{encounterId}/spells/cast",new {
+            combatantId=actor,classId="cleric",spellId="sacred-flame",pool=(string?)null,spellLevel=0,
+            targets=new[]{new { combatantId=target,distanceFeet=30,casterCanSeeTarget=true,
+                targetCanSeeCaster=true,cover="None" }},verbalAvailable=true,somaticAvailable=true,
+            materialAvailable=false,expectedRevision=revision
+        });
+        Assert.Equal(HttpStatusCode.Conflict,stale.StatusCode);
     }
     private static async Task<JsonElement> Post(HttpClient client,string url,object body)
     {

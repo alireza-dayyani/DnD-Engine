@@ -3,7 +3,7 @@ namespace DndEngine.Domain.Combat;
 // Visibility and spatial facts are adjudicated by the caller, including special senses.
 public sealed record AttackContext(int DistanceFeet, bool AttackerCanSeeTarget, bool TargetCanSeeAttacker,
     bool TargetLocationCorrect = true, bool CloseRangedThreat = false, Cover Cover = Cover.None,
-    Guid[]? VisibleFearSources = null, bool OpportunityProvoked = false);
+    Guid[]? VisibleFearSources = null, bool OpportunityProvoked = false, bool IgnoreBlur = false);
 public sealed record WeaponAttackOptions(Guid TargetId, Guid WeaponId, AttackMode Mode, AttackContext Context,
     AttackUse Use = AttackUse.Action, Ability? Ability = null, int Hands = 1, bool FreeHandToLoad = true,
     bool Mounted = false, bool Advantage = false, bool Disadvantage = false, int OtherModifier = 0, int FlatDamageAdjustment = 0);
@@ -78,6 +78,7 @@ public sealed class WeaponAttackResolver(IDiceRoller dice)
             own.OwnAttacksHaveDisadvantage || own.FearVisible(context.VisibleFearSources ?? []) ||
             own.GrappleDisadvantage(target.Id) || !context.AttackerCanSeeTarget ||
             other.Has(ConditionKind.Prone) && context.DistanceFeet > 5 ||
+            encounter.HasSpellEffect(defender.Id,"blur") && !context.IgnoreBlur ||
             defender.Resources.Dodging && other.CanAct && other.Speed > 0 && context.TargetCanSeeAttacker ||
             !melee && (context.DistanceFeet > weapon.NormalRange || context.CloseRangedThreat) ||
             weapon.Has(WeaponProperty.Heavy) && attacker.Abilities[weapon.Kind == WeaponKind.Melee ? Domain.Ability.Strength : Domain.Ability.Dexterity].Value < 13;

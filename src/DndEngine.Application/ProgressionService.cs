@@ -65,9 +65,16 @@ public sealed class ProgressionService(ICampaignStore campaigns, IProgressionSto
         var constitution = new AbilityScore(request.BaseAbilities[Ability.Constitution] + request.BackgroundBonuses.GetValueOrDefault(Ability.Constitution)).Modifier;
         var speciesHp = species.Features.SelectMany(x => x.Effects).Where(x => x.Kind == EffectKind.HitPointsPerLevel).Sum(x => x.Amount);
         var maxHp = Math.Max(1,@class.HitDie + constitution + speciesHp);
+        if (@class.Id != "wizard" && (request.WizardSpellbookIds ?? []).Length > 0)
+            throw new RuleViolation("Only a Wizard starts with a spellbook.");
+        var startingSpellbook = @class.Id == "wizard"
+            ? WizardSpellbook.Add([],new ClassLevel("wizard",1),spells,request.WizardSpellbookIds ?? [],6)
+            : [];
         state = state with { MaximumHp = maxHp, Resources = ResourcesFor(state,rules,[]),
             BackgroundToolId=request.BackgroundToolId, ClassTools=request.ClassTools ?? [],ExtraProficiencies=featProficiencies,
-            PreparedSpells=ValidateStartingSpells(@class.Id,request.PreparedSpellIds,spells),
+            PreparedSpells=ValidateStartingSpells(@class.Id,request.PreparedSpellIds,spells,startingSpellbook),
+            KnownCantrips=CantripKnowledge.Add([],new ClassLevel(@class.Id,1),spells,request.KnownCantripIds ?? []),
+            WizardSpellbookIds=startingSpellbook,
             SpellPackVersion=SpellPackVersions.Current };
         var character = Materialize(Guid.NewGuid(),campaign.Id,request.Name,state,rules,combat,new HitPoints(maxHp),0);
         var sheet = CharacterDeriver.Derive(character,state,rules,combat);
@@ -192,20 +199,50 @@ public sealed class ProgressionService(ICampaignStore campaigns, IProgressionSto
             request.SpellReplacement is null ? [] : [request.SpellReplacement],
             SpellPreparationMoment.ClassLevelGained,next.Id,ct);
         var additional = request.AdditionalPreparedSpellIds ?? [];
-        if (additional.Length > 0)
+        var additionalCantrips = request.AdditionalCantripIds ?? [];
+        var additionalBook = request.AdditionalWizardSpellbookIds ?? [];
+        var arcanum = state.MysticArcanumChoices ?? [];
+        var additionalMetamagic = request.AdditionalMetamagicOptions ?? [];
+        var metamagic = state.MetamagicOptions ?? [];
+        if (additionalMetamagic.Length > 0)
+        {
+            if (next.Id != "sorcerer" || classLevel is not (2 or 10 or 17) ||
+                additionalMetamagic.Length > 2 ||
+                additionalMetamagic.Any(x => !Enum.IsDefined(x) || metamagic.Contains(x)) ||
+                additionalMetamagic.Distinct().Count() != additionalMetamagic.Length)
+                throw new RuleViolation("Metamagic choices are unavailable or duplicate at this level.");
+            metamagic = [..metamagic,..additionalMetamagic];
+        }
+        var spellbook = state.WizardSpellbookIds ?? [];
+        var cantrips = state.KnownCantrips ?? [];
+        if (additional.Length > 0 || additionalCantrips.Length > 0 || additionalBook.Length > 0 ||
+            request.MysticArcanumSpellId is not null ||
+            request.CantripReplacement is not null)
         {
             var campaign = await campaigns.GetCampaignAsync(character.CampaignId,ct)
                 ?? throw new NotFoundException("Campaign not found.");
             var catalog = await spellCatalog.GetAsync(campaign.Ruleset,
                 state.SpellPackVersion ?? SpellPackVersions.Initial,ct);
-            prepared = SpellPreparation.Add(prepared,new ClassLevel(next.Id,classLevel),catalog,additional);
+            if (additionalBook.Length > 0)
+                spellbook = WizardSpellbook.Add(spellbook,new ClassLevel(next.Id,classLevel),catalog,
+                    additionalBook,newClass ? 6 : 2);
+            prepared = SpellPreparation.Add(prepared,new ClassLevel(next.Id,classLevel),catalog,additional,spellbook);
+            cantrips = CantripKnowledge.Replace(cantrips,classes,catalog,request.CantripReplacement,next.Id,false);
+            cantrips = CantripKnowledge.Add(cantrips,new ClassLevel(next.Id,classLevel),catalog,additionalCantrips);
+            if (request.MysticArcanumSpellId is not null)
+            {
+                if (next.Id != "warlock") throw new RuleViolation("Only Warlock gains Mystic Arcanum.");
+                arcanum = MysticArcanum.Choose(arcanum,classLevel,request.MysticArcanumSpellId,catalog);
+            }
         }
         int dieResult;
         if (request.HpMethod.Equals("Fixed",StringComparison.OrdinalIgnoreCase)) dieResult = next.HitDie / 2 + 1;
         else if (request.HpMethod.Equals("Roll",StringComparison.OrdinalIgnoreCase)) dieResult = dice.Roll(new(1,next.HitDie)).Total;
         else throw new RuleViolation("HP method must be Fixed or Roll.");
         var updated = state with { Classes = classes, FeatIds = feats.ToArray(), AdvancementBonuses = bonuses,
-            ExtraProficiencies = extraProficiencies.ToArray(), SubclassIds = subclassIds, PreparedSpells=prepared };
+            ExtraProficiencies = extraProficiencies.ToArray(), SubclassIds = subclassIds,
+            PreparedSpells=prepared, KnownCantrips=cantrips,WizardSpellbookIds=spellbook,
+            MetamagicOptions=metamagic,MysticArcanumChoices=arcanum };
         var newCon = new AbilityScore(updated.BaseAbilities[Ability.Constitution] + updated.BackgroundBonuses.GetValueOrDefault(Ability.Constitution) + bonuses.GetValueOrDefault(Ability.Constitution)).Modifier;
         var oldCon = oldSheet.AbilityModifiers[Ability.Constitution];
         var species = rules.Species.Single(x => x.Id == state.SpeciesId);
@@ -223,7 +260,10 @@ public sealed class ProgressionService(ICampaignStore campaigns, IProgressionSto
         var profile = Profile(id,sheet,combat,await combatStore.GetProfileAsync(id,ct));
         await progressions.SaveAsync(nextCharacter,updated,profile,Event(character,"LevelGained",character.Revision+1,
             new { classId=next.Id,classLevel,totalLevel=sheet.Level,hpGain,feat=request.FeatId,
-                spellReplacement=request.SpellReplacement,additionalPreparedSpellIds=additional }),ct);
+                spellReplacement=request.SpellReplacement,additionalPreparedSpellIds=additional,
+                cantripReplacement=request.CantripReplacement,additionalCantripIds=additionalCantrips,
+                additionalWizardSpellbookIds=additionalBook,additionalMetamagicOptions=additionalMetamagic,
+                mysticArcanumSpellId=request.MysticArcanumSpellId }),ct);
         return sheet with { Revision = character.Revision+1 };
     }
 
@@ -313,6 +353,37 @@ public sealed class ProgressionService(ICampaignStore campaigns, IProgressionSto
             rolls.Rolls.ToArray(),casting.AbilityModifier,change.HitPointsRegained);
     }
 
+    public async Task<CharacterSheet> AdoptSpellPackAsync(Guid id, AdoptSpellPack request, CancellationToken ct = default)
+    {
+        var (character,state,rules,combat) = await Load(id,ct);
+        await RequireMutable(character,request.ExpectedRevision,ct);
+        if (request.PackVersion != SpellPackVersions.Current ||
+            state.SpellPackVersion == SpellPackVersions.Current)
+            throw new RuleViolation("Spell pack adoption must move to the current pack.");
+        var campaign = await campaigns.GetCampaignAsync(character.CampaignId,ct)
+            ?? throw new NotFoundException("Campaign not found.");
+        var catalog = await spellCatalog.GetAsync(campaign.Ruleset,request.PackVersion,ct);
+        foreach (var choice in state.PreparedSpells ?? [])
+            if (!catalog.Any(x => x.Id == choice.SpellId && x.ClassIds.Contains(choice.ClassId)))
+                throw new RuleViolation("New spell pack omits a prepared spell.");
+        foreach (var idInBook in state.WizardSpellbookIds ?? [])
+            if (!catalog.Any(x => x.Id == idInBook && x.Level > 0 && x.ClassIds.Contains("wizard")))
+                throw new RuleViolation("New spell pack omits a spellbook spell.");
+        foreach (var (_,arcanumId) in state.MysticArcanumChoices ?? [])
+            if (!catalog.Any(x => x.Id == arcanumId && x.ClassIds.Contains("warlock")))
+                throw new RuleViolation("New spell pack omits a Mystic Arcanum spell.");
+        var cantrips = state.KnownCantrips ?? [];
+        foreach (var group in (request.KnownCantrips ?? []).GroupBy(x => x.ClassId))
+        {
+            var classLevel = state.Classes.SingleOrDefault(x => x.ClassId == group.Key)
+                ?? throw new RuleViolation("Cantrip class is not owned.");
+            cantrips = CantripKnowledge.Add(cantrips,classLevel,catalog,group.Select(x => x.SpellId).ToArray());
+        }
+        return await Save(character,state with { SpellPackVersion=request.PackVersion,KnownCantrips=cantrips },
+            rules,combat,"SpellPackAdopted",new { from=state.SpellPackVersion ?? SpellPackVersions.Initial,
+                to=request.PackVersion,knownCantrips=request.KnownCantrips ?? [] },ct);
+    }
+
     public async Task<RestResult> ShortRestAsync(Guid id, ShortRestRequest request, CancellationToken ct = default)
     {
         var (character,state,rules,combat) = await Load(id,ct);
@@ -352,13 +423,23 @@ public sealed class ProgressionService(ICampaignStore campaigns, IProgressionSto
         var replacements = request.SpellReplacements ?? [];
         var prepared = await ReplaceSpellsAsync(character,state,state.Classes,replacements,
             SpellPreparationMoment.LongRest,null,ct);
+        var cantrips = state.KnownCantrips ?? [];
+        if (request.CantripReplacement is not null)
+        {
+            var campaign = await campaigns.GetCampaignAsync(character.CampaignId,ct)
+                ?? throw new NotFoundException("Campaign not found.");
+            var catalog = await spellCatalog.GetAsync(campaign.Ruleset,
+                state.SpellPackVersion ?? SpellPackVersions.Initial,ct);
+            cantrips = CantripKnowledge.Replace(cantrips,state.Classes,catalog,request.CantripReplacement,null,true);
+        }
         var before = character.Health.State.Current;
         var health = new HitPoints(character.Health.State with { Current=character.Health.State.Maximum, Temporary=0,Stable=false,
             DeathSuccesses=0,DeathFailures=0 });
         var updated = state with { HitDice=state.HitDice.Select(x => x with { Available=x.Total }).ToArray(),
             Resources=state.Resources.Select(x => x with { Current=x.Maximum }).ToArray(), LastLongRestAtUtc=now,
             MasteredWeaponIds=request.MasteredWeaponIds ?? state.MasteredWeaponIds, SpellSlots=null,
-            PreparedSpells=prepared };
+            PreparedSpells=prepared,KnownCantrips=cantrips,SorceryPointsSpent=0,
+            MysticArcanumSpentLevels=[] };
         var nextCharacter = Materialize(character.Id,character.CampaignId,character.Name,updated,rules,combat,health,character.Revision);
         var sheet = CharacterDeriver.Derive(nextCharacter,updated,rules,combat);
         var oldProfile = await combatStore.GetProfileAsync(id,ct);
@@ -370,7 +451,7 @@ public sealed class ProgressionService(ICampaignStore campaigns, IProgressionSto
         await progressions.SaveAsync(nextCharacter,updated,profile,Event(character,"RestCompleted",character.Revision+1,
             new { kind="Long",hpRegained=health.State.Current-before,exhaustionReduced=exhaustion is not null,
                 sharedSlotsRestored=sharedRestored,pactSlotsRestored=pactRestored,
-                spellReplacements=replacements }),ct);
+                spellReplacements=replacements,cantripReplacement=request.CantripReplacement }),ct);
         var changes = new List<string> { "Temporary HP expired" };
         if (exhaustion is not null) changes.Add("Exhaustion reduced by one");
         if (sharedRestored > 0 || pactRestored > 0) changes.Add("Spell slots restored");
@@ -398,7 +479,8 @@ public sealed class ProgressionService(ICampaignStore campaigns, IProgressionSto
             ?? throw new NotFoundException("Campaign not found.");
         var catalog = await spellCatalog.GetAsync(campaign.Ruleset,
             state.SpellPackVersion ?? SpellPackVersions.Initial,ct);
-        return SpellPreparation.Replace(current,classes,catalog,replacements,moment,gainedClassId);
+        return SpellPreparation.Replace(current,classes,catalog,replacements,moment,gainedClassId,
+            state.WizardSpellbookIds);
     }
     private async Task<(Character Character,ProgressionState State,CharacterRules Rules,CombatContent Combat)> Load(Guid id,CancellationToken ct)
     {
@@ -457,9 +539,10 @@ public sealed class ProgressionService(ICampaignStore campaigns, IProgressionSto
         }
         return values.Select(x => x with { Source=source }).ToArray();
     }
-    private static PreparedSpell[] ValidateStartingSpells(string classId,string[]? selected,SpellDefinition[] catalog)
+    private static PreparedSpell[] ValidateStartingSpells(string classId,string[]? selected,SpellDefinition[] catalog,
+        string[] wizardSpellbook)
     {
-        return SpellPreparation.Add([],new ClassLevel(classId,1),catalog,selected ?? []);
+        return SpellPreparation.Add([],new ClassLevel(classId,1),catalog,selected ?? [],wizardSpellbook);
     }
     private static Character Materialize(Guid id,Guid campaignId,string name,ProgressionState state,CharacterRules rules,
         CombatContent combat,HitPoints health,long revision)
