@@ -84,7 +84,7 @@ public class ApiTests
     {
         await using var app=new Factory(3,4); using var client=app.CreateClient();
         var spells=await client.GetFromJsonAsync<JsonElement>("/spells");
-        Assert.Equal(10,spells.GetArrayLength());
+        Assert.Equal(11,spells.GetArrayLength());
         Assert.Equal("cure-wounds",spells[0].GetProperty("id").GetString());
         Assert.Equal("healing-word",spells[1].GetProperty("id").GetString());
         var third=await client.GetFromJsonAsync<JsonElement>("/spells?packVersion=3");

@@ -92,7 +92,13 @@ public sealed class SpellCatalog(RulesDbContext db) : ISpellCatalog
                 "Action","60 feet","V",SpellEffectKind.SavingThrowDamage,"SRD 5.2.1 p. 172",
                 Damage:new(DamageType.Psychic,1,6,Ability.Wisdom))
         ];
-        await ImportPackAsync(db,SpellPackVersions.Current,current,ct);
+        await ImportPackAsync(db,SpellPackVersions.Fourth,current,ct);
+        SpellDefinition[] fifth = [..current,
+            new("hellish-rebuke","Hellish Rebuke",1,["warlock"],"Reaction","60 feet","V,S",
+                SpellEffectKind.SavingThrowDamage,"SRD 5.2.1 p. 140",
+                Damage:new(DamageType.Fire,2,10,Ability.Dexterity,1,HalfOnSave:true))
+        ];
+        await ImportPackAsync(db,SpellPackVersions.Current,fifth,ct);
     }
 
     private static async Task ImportPackAsync(RulesDbContext db,string version,SpellDefinition[] spells,CancellationToken ct)

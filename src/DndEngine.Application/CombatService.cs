@@ -85,17 +85,73 @@ public sealed class CombatService(ICampaignStore campaigns, ICombatStore store, 
         Execute(id, "CombatantStood", s => { var c = s.Encounter.Combatant(request.CombatantId); return s.Encounter.Stand(c.Id, s.Characters[c.CharacterId], s.Profiles[c.CharacterId]); }, ct, request.CombatantId);
     public Task<CombatCommandResult<TurnResources>> ActionAsync(Guid id, TakeCombatAction request, CancellationToken ct = default) =>
         Execute(id, "CombatActionTaken", s => { s.Encounter.Act(request.CombatantId, Effects(s, request.CombatantId), request.Action); return s.Encounter.Combatant(request.CombatantId).Resources; }, ct, request.CombatantId);
-    public Task<CombatCommandResult<WeaponAttackResult>> AttackAsync(Guid id, AttackCombatant request, CancellationToken ct = default) =>
-        Execute(id, "AttackMade", s => {
-            if (request.Attack is null) throw new RuleViolation("Attack options are required.");
-            var actor = s.Encounter.Combatant(request.CombatantId); var target = s.Encounter.Combatant(request.Attack.TargetId);
-            var profile = s.Profiles[actor.CharacterId]; var weapon = profile.Weapon(request.Attack.WeaponId);
-            var result = new WeaponAttackResolver(dice).Resolve(s.Encounter, actor.Id, s.Characters[actor.CharacterId], profile,
-                s.Characters[target.CharacterId], s.Profiles[target.CharacterId], s.Content.Weapons.Single(x => x.Id == weapon.DefinitionId), request.Attack);
-            if (result.Damage is { AppliedDamage: > 0 }) CheckConcentration(s,target.Id,result.Damage.AppliedDamage);
-            ReleaseGrapples(s);
-            return result;
-        }, ct);
+    public async Task<CombatCommandResult<WeaponAttackResult>> AttackAsync(Guid id, AttackCombatant request, CancellationToken ct = default)
+    {
+        var s = await Load(id,ct);
+        if (request.Attack is null) throw new RuleViolation("Attack options are required.");
+        if (request.Reaction is not null && request.ExpectedRevision != s.Encounter.State.Revision)
+            throw new StateConflictException("Encounter revision changed. Reload before declaring a reaction.");
+        var actor = s.Encounter.Combatant(request.CombatantId); var target = s.Encounter.Combatant(request.Attack.TargetId);
+        var profile = s.Profiles[actor.CharacterId]; var weapon = profile.Weapon(request.Attack.WeaponId);
+        ProgressionState? reactionState = null;
+        SpellDefinition? reactionSpell = null;
+        ClassSpellcasting? reactionCasting = null;
+        if (request.Reaction is { } declared)
+        {
+            if (progressions is null || spellCatalog is null)
+                throw new RuleViolation("Spellcasting is not installed.");
+            var defender = s.Characters[target.CharacterId];
+            reactionState = await progressions.GetAsync(defender.Id,ct)
+                ?? throw new RuleViolation("Defender has no spellcasting progression.");
+            reactionSpell = (await spellCatalog.GetAsync(s.Campaign.Ruleset,
+                reactionState.SpellPackVersion ?? SpellPackVersions.Initial,ct))
+                .SingleOrDefault(x => x.Id == "hellish-rebuke")
+                ?? throw new RuleViolation("Hellish Rebuke is not in the defender's pinned pack.");
+            if (!(reactionState.PreparedSpells ?? []).Any(x => x.ClassId == "warlock" && x.SpellId == reactionSpell.Id))
+                throw new RuleViolation("Hellish Rebuke is not prepared as a Warlock spell.");
+            if (s.Profiles[defender.Id].State.Capabilities.UntrainedArmorPenalty ||
+                !declared.VerbalAvailable || !declared.SomaticAvailable)
+                throw new RuleViolation("The defender cannot supply the spell components.");
+            reactionCasting = SpellSlotCalculator.Derive(defender,reactionState)?.Classes
+                .SingleOrDefault(x => x.ClassId == "warlock")
+                ?? throw new RuleViolation("Defender has no Warlock spellcasting feature.");
+            if (declared.SpellLevel < reactionSpell.Level)
+                throw new RuleViolation("Hellish Rebuke requires an eligible slot.");
+            if (s.Encounter.Combatant(target.Id).Resources.ReactionUsed ||
+                s.Encounter.CurrentCombatantId == target.Id &&
+                (s.Encounter.Combatant(target.Id).Resources.SpellSlotCast ||
+                 s.Encounter.Combatant(target.Id).Resources.QuickenedSpellUsed) ||
+                !Effects(s,target.Id).CanAct)
+                throw new RuleViolation("The defender cannot take a spell reaction now.");
+            SpellSlotCalculator.Spend(defender,reactionState,declared.Pool,declared.SpellLevel);
+            if (request.Attack.Context is null || !request.Attack.Context.TargetCanSeeAttacker ||
+                request.Attack.Context.DistanceFeet > 60)
+                throw new RuleViolation("Hellish Rebuke requires a visible damage source within 60 feet.");
+        }
+        var result = new WeaponAttackResolver(dice).Resolve(s.Encounter, actor.Id, s.Characters[actor.CharacterId], profile,
+            s.Characters[target.CharacterId], s.Profiles[target.CharacterId], s.Content.Weapons.Single(x => x.Id == weapon.DefinitionId), request.Attack);
+        if (result.Damage is { AppliedDamage: > 0 }) CheckConcentration(s,target.Id,result.Damage.AppliedDamage);
+        if (request.Reaction is { } reaction && result.Damage is { AppliedDamage: > 0 } &&
+            Effects(s,target.Id).CanAct)
+        {
+            var defender = s.Characters[target.CharacterId];
+            var (usage,slotBefore) = SpellSlotCalculator.Spend(defender,reactionState!,reaction.Pool,reaction.SpellLevel);
+            var resources = s.Encounter.UseReactionMagic(target.Id,Effects(s,target.Id));
+            var spellTarget = new SpellTargetContext(actor.Id,request.Attack.Context.DistanceFeet,
+                request.Attack.Context.TargetCanSeeAttacker,request.Attack.Context.AttackerCanSeeTarget);
+            var retaliation = new SpellCombatResolver(dice).Resolve(s.Encounter,target.Id,defender,
+                s.Profiles[defender.Id],s.Characters,s.Profiles,reactionSpell!,reactionCasting!,
+                [spellTarget],reaction.SpellLevel).Single();
+            if (retaliation.Damage is { AppliedDamage: > 0 })
+                CheckConcentration(s,actor.Id,retaliation.Damage.AppliedDamage);
+            s.ProgressionUpdates.Add(defender.Id,reactionState! with { SpellSlots=usage });
+            var reactionResult = new ReactionSpellResolution(reactionSpell!.Id,reaction.SpellLevel,
+                reaction.Pool,slotBefore,resources,retaliation);
+            result = result with { ReactionSpell=reactionResult };
+        }
+        ReleaseGrapples(s);
+        return await Save(s,"AttackMade",result,ct,actor.Id);
+    }
     public async Task<CombatCommandResult<CombatSpellResolution>> CastSpellAsync(Guid id, CastCombatSpell request, CancellationToken ct = default)
     {
         if (progressions is null || spellCatalog is null) throw new RuleViolation("Spellcasting is not installed.");

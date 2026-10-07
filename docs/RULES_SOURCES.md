@@ -1,5 +1,9 @@
 # Rules sources and license
 
+## Phase 4 pack 5 reaction follow-on (2026-10-07)
+
+The [official SRD 5.2.1 PDF](https://media.dndbeyond.com/compendium-images/srd/5.2/SRD_CC_v5.2.1.pdf) defines Hellish Rebuke on printed p. 140: a Warlock level 1 Reaction to damage from a visible creature within 60 feet, requiring V/S components; the source makes a Dexterity save against 2d10 Fire damage (half on success), with 1d10 per higher slot level. This implementation ties the trigger to positive applied damage from a weapon attack and persists the reaction and spell slot in the same encounter transaction. Other damage sources remain outside this path.
+
 ## Phase 4 pack 4 follow-on (2026-10-06)
 
 The [official SRD 5.2.1 PDF](https://media.dndbeyond.com/compendium-images/srd/5.2/SRD_CC_v5.2.1.pdf) supplies Poison Spray (printed p. 153), Eldritch Blast (p. 127), Vicious Mockery (p. 172), Circle of Death's 500+ GP nonconsumed black pearl powder (p. 115), material component rules (pp. 105–106), Sorcerer Font of Magic and recovery/Metamagic (pp. 65–67), and Wizard Ritual Adept, Arcane Recovery and Memorize Spell (p. 78). Pack 4 adds these three cantrips and four supported Metamagic options, plus Font of Magic and short-rest recovery. Ritual casting, other Metamagic options and the full spell catalog remain unimplemented. Pack 4's priced material check verifies a named inventory entry; it does not appraise the item or model purchase funds. Packs 1–3 remain pinned and unchanged.

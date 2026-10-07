@@ -187,6 +187,20 @@ public sealed class CombatEncounter
         return resources;
     }
 
+    public TurnResources UseReactionMagic(Guid actor, ConditionEffects effects)
+    {
+        RequireActive();
+        var combatant = Combatant(actor);
+        effects.RequireAction();
+        if (combatant.Resources.ReactionUsed || CurrentCombatantId == actor &&
+            (combatant.Resources.SpellSlotCast || combatant.Resources.QuickenedSpellUsed))
+            throw new RuleViolation("Reaction or spell slot casting is unavailable.");
+        var resources = combatant.Resources with { ReactionUsed = true,
+            SpellSlotCast = combatant.Resources.SpellSlotCast || CurrentCombatantId == actor };
+        SetResources(actor,resources);
+        return resources;
+    }
+
     public ActiveSpellEffect StartConcentration(Guid caster, Guid target, string spellId, int rounds)
     {
         RequireTurn(caster);

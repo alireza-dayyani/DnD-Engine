@@ -16,6 +16,8 @@ public sealed record CombatSpellResolution(string ClassId, string SpellId, int S
     ActiveSpellEffect? ActiveEffect = null, MetamagicOption? Metamagic = null,
     int? SorceryPointsAfter = null, bool MysticArcanumSpent = false,
     AttackPenaltyEffect[]? AppliedAttackPenalties = null);
+public sealed record ReactionSpellResolution(string SpellId, int SpellLevel, SpellSlotPoolKind Pool,
+    int SlotBefore, TurnResources Resources, SpellTargetResult Target);
 
 public sealed class SpellCombatResolver(IDiceRoller dice)
 {

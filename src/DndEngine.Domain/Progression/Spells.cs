@@ -10,7 +10,8 @@ public static class SpellPackVersions
     public const string Initial = "1";
     public const string Second = "2";
     public const string Previous = "3";
-    public const string Current = "4";
+    public const string Fourth = "4";
+    public const string Current = "5";
 }
 
 public sealed record SpellDefinition(string Id, string Name, int Level, string[] ClassIds,
@@ -80,7 +81,7 @@ public static class FeatureSpells
 {
     public static PreparedSpell[] AlwaysPrepared(ProgressionState state)
     {
-        if (state.SpellPackVersion is not (SpellPackVersions.Previous or SpellPackVersions.Current)) return [];
+        if (state.SpellPackVersion is not (SpellPackVersions.Previous or SpellPackVersions.Fourth or SpellPackVersions.Current)) return [];
         var warlock = state.Classes.SingleOrDefault(x => x.ClassId == "warlock");
         return warlock is { Level: >= 3 } &&
             (state.SubclassIds ?? []).GetValueOrDefault("warlock") == "fiend-patron"

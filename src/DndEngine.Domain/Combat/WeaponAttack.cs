@@ -11,7 +11,8 @@ public sealed record WeaponDamageRoll(string Expression, IReadOnlyList<int> Roll
 public sealed record WeaponAttackResult(Guid AttackerId, Guid TargetId, Guid WeaponId, string DefinitionId,
     AttackUse Use, Ability Ability, int AbilityModifier, int ProficiencyBonus, int OtherModifier, int ConditionModifier,
     int ArmorClass, D20Roll AttackRoll, bool Hit, bool Critical, WeaponDamageRoll? DamageRoll, int DamageModifier,
-    DamageResolution? Damage, HealthChange? Health, TurnResources Resources, WeaponAttackOptions Options, string Source);
+    DamageResolution? Damage, HealthChange? Health, TurnResources Resources, WeaponAttackOptions Options, string Source,
+    ReactionSpellResolution? ReactionSpell = null);
 
 public sealed class WeaponAttackResolver(IDiceRoller dice)
 {

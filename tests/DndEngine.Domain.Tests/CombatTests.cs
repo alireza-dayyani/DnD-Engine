@@ -91,6 +91,19 @@ public class CombatTests
         Assert.Equal(2, f.Encounter.State.Round); Assert.Equal(3, f.Encounter.State.TurnNumber);
         Assert.Equal(30, f.Encounter.MovementRemaining(f.Actor, 30)); Assert.False(f.Encounter.Combatant(f.Actor).Resources.ActionUsed);
     }
+    [Fact]
+    public void ReactionMagicUsesItsOwnTurnBudgetAndResetsAtOwnersNextTurn()
+    {
+        var f = new Fight(); var effects = new ConditionEffects(f.A,f.PA);
+        f.Encounter.UseMagic(f.Actor,effects,"Action",true);
+        Assert.Throws<RuleViolation>(()=>f.Encounter.UseReactionMagic(f.Actor,effects));
+        f.Encounter.EndTurn(f.Actor);
+        var reaction=f.Encounter.UseReactionMagic(f.Actor,effects);
+        Assert.True(reaction.ReactionUsed);
+        Assert.Throws<RuleViolation>(()=>f.Encounter.UseReactionMagic(f.Actor,effects));
+        f.Encounter.EndTurn(f.Target);
+        Assert.False(f.Encounter.Combatant(f.Actor).Resources.ReactionUsed);
+    }
     [Theory]
     [InlineData(1, false, false, 20)]
     [InlineData(6, false, false, 20)]
