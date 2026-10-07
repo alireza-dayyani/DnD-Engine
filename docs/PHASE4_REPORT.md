@@ -28,16 +28,18 @@ The eleventh increment introduces deterministic campaign game time as elapsed se
 
 The twelfth increment adds immutable pack 6 with Comprehend Languages, leaving packs 1–5 unchanged. An out-of-combat Action cast spends a slot and six game seconds; a ritual takes 606 game seconds and no slot. Wizard Ritual Adept can read an unprepared copy in the modeled spellbook; other casters must prepare it. The one-hour effect persists with progression state and is checked against campaign game time for heard, seen signed, or touched written language. Character revision, campaign revision/time, slot use, effect expiry and audit event commit together. The caller asserts uninterrupted long casting and access to soot-and-salt components. Combat casting and semantic translation are outside this slice.
 
+The thirteenth increment connects combat rounds to campaign game time. The first successful non-ending command in an active round charges six seconds, while a turn that wraps charges the round being left and waits for a command in the new round before charging it. A persisted last-clocked-round marker prevents duplicate advances after restart. The campaign clock and revision, encounter state, combat changes and `CombatRoundTimed` event commit atomically. A timed Comprehend Languages effect now expires as combat consumes game time; casting it within combat is still unsupported.
+
 Source research: [official SRD 5.2.1 PDF](https://media.dndbeyond.com/compendium-images/srd/5.2/SRD_CC_v5.2.1.pdf), multiclass spellcasting pp. 23–25; Bard p. 30, Cleric p. 35, Druid p. 40, Paladin p. 52, Ranger p. 57, Sorcerer p. 64, Warlock pp. 70–71, Wizard p. 76; spellcasting rules pp. 103–106; Concentration p. 178. `RULES_SOURCES.md` records this source boundary.
 
 ## Delivered boundary and follow-on work
 
 The Phase 4 foundation criteria above now have executable paths: cantrips and version adoption; a spellbook and examples of feature-granted spells, Metamagic and Mystic Arcanum; encounter casting with persistent concentration; multi-target atomic resolution; and one timed ritual. Current pack 6 has **twelve executable spells**. The API rejects unsupported effects instead of silently approximating them.
 
-1. Expand the SRD catalog with further immutable packs and effect-specific resolvers. Ten spells remain a small subset. Higher Mystic Arcanum levels, other always-prepared/subclass spells and many Metamagic options still need content and mechanics.
+1. Expand the SRD catalog with further immutable packs and effect-specific resolvers. Twelve spells remain a small subset. Higher Mystic Arcanum levels, other always-prepared/subclass spells and many Metamagic options still need content and mechanics.
 2. Complete inventory economics and spatial adjudication. Pack 4 checks the specific priced Circle of Death item in inventory, but acquisition currently records an item without a purchase or appraisal transaction. Component access, sight, cover, range, cone/sphere membership and special senses still rely on caller-supplied facts. The engine has no map, held-object model or proof that every creature in an area was included.
-3. Add further rituals, area and multi-beam reaction timing, more reaction spells, more concentration and ongoing effects, Wizard copying, combat use of language effects, feature interactions and spell attack/save modifiers. The full SRD magic system is **not complete**.
+3. Add further rituals, area and multi-beam reaction timing, more reaction spells, more concentration and ongoing effects, Wizard copying, combat casting and semantic use of language effects, feature interactions and spell attack/save modifiers. The full SRD magic system is **not complete**.
 
-The next increment should extend the timed-effect model into encounters or implement another ritual with a distinct mechanical effect.
+The next increment should implement another ritual with a distinct mechanical effect or extend timed effects beyond simple expiry checks.
 
-Current validation: `dotnet test DndEngine.slnx --no-restore` passes 148 domain, 10 application and 54 integration tests. Automated coverage verifies the implemented routes and persistence; it does not establish full SRD spell coverage, geometry or combat balance.
+Current validation: `dotnet test DndEngine.slnx --no-restore` passes 148 domain, 10 application and 55 integration tests. Automated coverage verifies the implemented routes and persistence; it does not establish full SRD spell coverage, geometry or combat balance.

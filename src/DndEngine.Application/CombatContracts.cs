@@ -16,7 +16,8 @@ public interface ICombatStore
     Task SaveProfileAsync(Character character, CombatProfile profile, CampaignEvent entry, CancellationToken ct);
     Task SaveEncounterAsync(CombatEncounter encounter, IReadOnlyList<Character> characters,
         IReadOnlyList<CombatProfile> profiles, IReadOnlyList<CampaignEvent> events, bool create, CancellationToken ct,
-        IReadOnlyDictionary<Guid, ProgressionState>? progressionUpdates = null);
+        IReadOnlyDictionary<Guid, ProgressionState>? progressionUpdates = null,
+        Campaign? clockBefore = null, Campaign? clockAfter = null);
 }
 public sealed record CreateCombat(string Name);
 public sealed record AddCombatant(Guid CharacterId, CombatantKind Kind = CombatantKind.PlayerCharacter,

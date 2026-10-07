@@ -50,10 +50,16 @@ public sealed class SqliteCombatStore(CampaignDbContext db) : ICombatStore
     }
     public async Task SaveEncounterAsync(CombatEncounter encounter, IReadOnlyList<Character> characters,
         IReadOnlyList<CombatProfile> profiles, IReadOnlyList<CampaignEvent> events, bool create, CancellationToken ct,
-        IReadOnlyDictionary<Guid, ProgressionState>? progressionUpdates = null)
+        IReadOnlyDictionary<Guid, ProgressionState>? progressionUpdates = null,
+        Campaign? clockBefore = null, Campaign? clockAfter = null)
     {
         try
         {
+            if ((clockBefore is null) != (clockAfter is null) ||
+                clockBefore is not null && (clockBefore.Id != encounter.State.CampaignId ||
+                    clockAfter!.Id != clockBefore.Id || clockAfter.Revision != clockBefore.Revision + 1 ||
+                    clockAfter.GameSeconds != clockBefore.GameSeconds + 6))
+                throw new RuleViolation("Invalid combat round time transition.");
             var state = encounter.State;
             var row = new EncounterRow { Id = state.Id, CampaignId = state.CampaignId, Revision = state.Revision,
                 StateJson = JsonSerializer.Serialize(state, CombatCatalog.Json) };
@@ -69,6 +75,13 @@ public sealed class SqliteCombatStore(CampaignDbContext db) : ICombatStore
             {
                 var progressionRow = await db.Progressions.SingleAsync(x => x.CharacterId == characterId,ct);
                 progressionRow.StateJson = JsonSerializer.Serialize(progression,CombatCatalog.Json);
+            }
+            if (clockBefore is not null)
+            {
+                var campaign = await db.Campaigns.SingleAsync(x => x.Id == clockBefore.Id, ct);
+                campaign.GameSeconds = clockAfter!.GameSeconds;
+                campaign.Revision = clockAfter.Revision;
+                db.Entry(campaign).Property(x => x.Revision).OriginalValue = clockBefore.Revision;
             }
             var memberships = await db.CombatMemberships.Where(x => x.EncounterId == state.Id).ToArrayAsync(ct);
             if (state.Status == EncounterStatus.Completed) db.CombatMemberships.RemoveRange(memberships);

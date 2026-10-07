@@ -9,7 +9,7 @@ public sealed class CombatService(ICampaignStore campaigns, ICombatStore store, 
 {
     private sealed record Session(CombatEncounter Encounter, Campaign Campaign, CombatContent Content,
         Dictionary<Guid, Character> Characters, Dictionary<Guid, CombatProfile> Profiles, List<CampaignEvent> Events,
-        Dictionary<Guid, ProgressionState> ProgressionUpdates);
+        Dictionary<Guid, ProgressionState> ProgressionUpdates, int OriginalRound);
     private sealed record ReactionCast(ProgressionState State, SpellDefinition Spell,
         ClassSpellcasting Casting, HellishRebukeReaction Declaration);
 
@@ -413,6 +413,21 @@ public sealed class CombatService(ICampaignStore campaigns, ICombatStore store, 
     { var s = await Load(id, ct); var result = command(s); return await Save(s, type, result, ct, subject); }
     private async Task<CombatCommandResult<T>> Save<T>(Session s, string type, T result, CancellationToken ct, Guid? subject = null)
     {
+        Campaign? clockAfter = null;
+        if (s.Encounter.State.Status == EncounterStatus.Active && type != "CombatStarted")
+        {
+            // The first completed command in a round charges its six seconds. A wrapping EndTurn
+            // charges the round being left; the next round is charged by its first command.
+            var roundToClock = type == "TurnAdvanced" && s.Encounter.State.Round > s.OriginalRound
+                ? s.OriginalRound : s.Encounter.State.Round;
+            if (roundToClock > s.Encounter.State.LastClockedRound)
+            {
+                clockAfter = s.Campaign.AdvanceTime(6);
+                s.Encounter.MarkRoundClocked(roundToClock);
+                Emit(s, "CombatRoundTimed", new { Round = roundToClock,
+                    BeforeGameSecond = s.Campaign.GameSeconds, AfterGameSecond = clockAfter.GameSeconds });
+            }
+        }
         foreach (var effect in s.Encounter.ActiveSpells.ToArray())
             if (!Effects(s,effect.CasterCombatantId).CanAct)
             {
@@ -432,7 +447,7 @@ public sealed class CombatService(ICampaignStore campaigns, ICombatStore store, 
             var started = s.Events[^1]; s.Events.RemoveAt(s.Events.Count - 1); s.Events.Insert(0, started);
         }
         await store.SaveEncounterAsync(s.Encounter, s.Characters.Values.ToArray(), s.Profiles.Values.ToArray(), s.Events, false, ct,
-            s.ProgressionUpdates);
+            s.ProgressionUpdates, clockAfter is null ? null : s.Campaign, clockAfter);
         return new(s.Encounter.State.Id, s.Encounter.State.Revision + 1, s.Encounter.State.Round, s.Encounter.State.TurnNumber, result);
     }
     private void Emit<T>(Session s, string type, T data, Guid? subject = null) => s.Events.Add(Event(s.Campaign, type,
@@ -448,7 +463,7 @@ public sealed class CombatService(ICampaignStore campaigns, ICombatStore store, 
         // Read each character revision BEFORE its profile; subsequent writes guard the complete read set.
         foreach (var member in encounter.State.Combatants)
         { characters.Add(member.CharacterId, await Character(member.CharacterId, ct)); profiles.Add(member.CharacterId, await Profile(member.CharacterId, ct)); }
-        return new(encounter, campaign, content, characters, profiles, [],new());
+        return new(encounter, campaign, content, characters, profiles, [],new(),encounter.State.Round);
     }
     private async Task<Campaign> Campaign(Guid id, CancellationToken ct)
     { var result = await campaigns.GetCampaignAsync(id, ct) ?? throw new NotFoundException("Campaign not found."); result.Ruleset.RequireSupported(); return result; }

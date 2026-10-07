@@ -18,7 +18,8 @@ public sealed record CombatantState(Guid Id, Guid CharacterId, CombatantKind Kin
     bool Surprised, string? InitiativeGroup, D20Roll? Initiative, TurnResources Resources);
 public sealed record EncounterState(Guid Id, Guid CampaignId, string Name, EncounterStatus Status,
     CombatantState[] Combatants, Guid[] Order, int Round, int TurnIndex, long TurnNumber, long Revision,
-    ActiveSpellEffect[]? ActiveSpells = null, AttackPenaltyEffect[]? AttackPenalties = null);
+    ActiveSpellEffect[]? ActiveSpells = null, AttackPenaltyEffect[]? AttackPenalties = null,
+    int LastClockedRound = 0);
 public sealed record InitiativeTie(int Total, Guid[] Combatants, string DecidedBy);
 public sealed record InitiativeResult(CombatantState[] Combatants, InitiativeTie[] Ties);
 public sealed record MovementResult(Guid CombatantId, int Distance, MovementMode Mode, bool DifficultTerrain, int Cost, int Speed, int Used, int Remaining);
@@ -34,7 +35,8 @@ public sealed class CombatEncounter
     public CombatEncounter(EncounterState state)
     {
         Guard.Name(state.Name); Guard.Defined(state.Status);
-        if (state.Id == Guid.Empty || state.CampaignId == Guid.Empty || state.Revision < 0 || state.Combatants is null || state.Order is null)
+        if (state.Id == Guid.Empty || state.CampaignId == Guid.Empty || state.Revision < 0 || state.Combatants is null || state.Order is null ||
+            state.LastClockedRound < 0 || state.LastClockedRound > state.Round)
             throw new RuleViolation("Invalid encounter state.");
         if (state.Combatants.Select(x => x.Id).Distinct().Count() != state.Combatants.Length ||
             state.Combatants.Select(x => x.CharacterId).Distinct().Count() != state.Combatants.Length)
@@ -125,6 +127,15 @@ public sealed class CombatEncounter
         State = State with { ActiveSpells = ActiveSpells.Where(x => x.ExpiresOnTurn > State.TurnNumber).ToArray() };
         State = State with { AttackPenalties = (State.AttackPenalties ?? []).Where(x => x.ExpiresOnTurn > State.TurnNumber).ToArray() };
         ResetCurrentTurn();
+    }
+    public void MarkRoundClocked(int round)
+    {
+        RequireActive();
+        // Old persisted encounters predate this marker and may already be past round one.
+        if (round <= State.LastClockedRound || round > State.Round ||
+            State.LastClockedRound != 0 && round != State.LastClockedRound + 1)
+            throw new RuleViolation("Combat rounds must advance the campaign clock in order.");
+        State = State with { LastClockedRound = round };
     }
     private void ResetCurrentTurn() => SetResources(CurrentCombatantId!.Value, new());
     public void Complete()
