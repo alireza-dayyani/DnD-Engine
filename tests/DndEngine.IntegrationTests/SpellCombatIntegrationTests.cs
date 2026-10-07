@@ -72,6 +72,68 @@ public sealed class SpellCombatIntegrationTests
     }
 
     [Fact]
+    public async Task HellishRebukeCanReactToDirectSpellDamageWithSourceCover()
+    {
+        var path=Path.Combine(Path.GetTempPath(),"DndEngine.SpellReactionTests",Guid.NewGuid().ToString("N"));
+        Guid encounterId,sorcererId,warlockId,warlockCombatant;
+        await using(var provider=Provider(path,18,2,1,18,4,10,2,2))
+        {
+            await provider.InitializeDndEngineAsync();
+            await using var scope=provider.CreateAsyncScope(); var services=scope.ServiceProvider;
+            var campaign=await services.GetRequiredService<CampaignService>().CreateAsync(new("Spell reaction"));
+            var progression=services.GetRequiredService<ProgressionService>();
+            var sorcerer=await progression.CreateAsync(new(campaign.Id,"Nira","dwarf",null,"Medium",
+                "criminal","sorcerer",Enum.GetValues<Ability>().ToDictionary(x=>x,_=>13),
+                new() { [Ability.Dexterity]=2,[Ability.Constitution]=1 },["arcana","persuasion"],
+                PreparedSpellIds:["burning-hands"],KnownCantripIds:["fire-bolt"]));
+            sorcererId=sorcerer.Id;
+            var warlock=await progression.CreateAsync(new(campaign.Id,"Thane","dwarf",null,"Medium",
+                "criminal","warlock",Enum.GetValues<Ability>().ToDictionary(x=>x,_=>13),
+                new() { [Ability.Dexterity]=2,[Ability.Constitution]=1 },["arcana","history"],
+                PreparedSpellIds:["hellish-rebuke"]));
+            warlockId=warlock.Id;
+            var combat=services.GetRequiredService<CombatService>();
+            var encounter=await combat.CreateAsync(campaign.Id,new("Duel")); encounterId=encounter.Id;
+            var caster=(await combat.AddAsync(encounterId,new(sorcerer.Id))).Result.Id;
+            warlockCombatant=(await combat.AddAsync(encounterId,new(warlock.Id))).Result.Id;
+            await combat.InitiativeAsync(encounterId); await combat.StartAsync(encounterId,new());
+            var revision=(await combat.GetAsync(encounterId)).Encounter.Revision;
+            await Assert.ThrowsAsync<RuleViolation>(()=>combat.CastSpellAsync(encounterId,
+                new(caster,"sorcerer","burning-hands",SpellSlotPoolKind.Shared,1,
+                    [new(warlockCombatant,10,true,true)],true,true,false,revision,
+                    Reaction:new(SpellSlotPoolKind.PactMagic,1,true,true))));
+            var cast=new CastCombatSpell(caster,"sorcerer","fire-bolt",null,0,
+                [new(warlockCombatant,30,true,true)],true,true,false,revision,
+                Reaction:new(SpellSlotPoolKind.PactMagic,1,true,true,Cover.Half));
+            await Assert.ThrowsAsync<RuleViolation>(()=>combat.CastSpellAsync(encounterId,
+                cast with { Targets=[new(warlockCombatant,30,true,false)] }));
+            var missed=await combat.CastSpellAsync(encounterId,cast);
+            Assert.Null(missed.Result.ReactionSpell);
+            Assert.Equal(1,(await progression.SpellcastingAsync(warlockId))!.PactMagicSlots!.Current);
+            await combat.EndTurnAsync(encounterId,new(caster));
+            await combat.EndTurnAsync(encounterId,new(warlockCombatant));
+            var hit=await combat.CastSpellAsync(encounterId,cast with {
+                ExpectedRevision=(await combat.GetAsync(encounterId)).Encounter.Revision });
+            Assert.Equal(4,hit.Result.Targets[0].Damage!.AppliedDamage);
+            Assert.Equal("hellish-rebuke",hit.Result.ReactionSpell!.SpellId);
+            Assert.False(hit.Result.ReactionSpell.Target.HitOrFailedSave);
+            Assert.Equal(2,hit.Result.ReactionSpell.Target.Damage!.AppliedDamage);
+            Assert.Equal(0,(await progression.SpellcastingAsync(warlockId))!.PactMagicSlots!.Current);
+        }
+        await using(var provider=Provider(path))
+        {
+            await provider.InitializeDndEngineAsync();
+            await using var scope=provider.CreateAsyncScope(); var services=scope.ServiceProvider;
+            var combat=services.GetRequiredService<CombatService>();
+            var view=await combat.GetAsync(encounterId);
+            Assert.True(view.Encounter.Combatants.Single(x=>x.Id==warlockCombatant).Resources.ReactionUsed);
+            Assert.Equal(0,(await services.GetRequiredService<ProgressionService>()
+                .SpellcastingAsync(warlockId))!.PactMagicSlots!.Current);
+            Assert.True(view.Characters.Single(x=>x.Id==sorcererId).Health.Current > 0);
+        }
+    }
+
+    [Fact]
     public async Task ViciousMockeryPenaltyPersistsAndIsConsumedByNextAttack()
     {
         var path=Path.Combine(Path.GetTempPath(),"DndEngine.MockeryTests",Guid.NewGuid().ToString("N"));

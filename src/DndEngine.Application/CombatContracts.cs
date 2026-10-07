@@ -29,14 +29,14 @@ public sealed record MoveCombatant(Guid CombatantId, int Distance, MovementMode 
     bool DifficultTerrain = false, bool ApproachesFear = false);
 public sealed record TakeCombatAction(Guid CombatantId, CombatAction Action);
 public sealed record HellishRebukeReaction(SpellSlotPoolKind Pool, int SpellLevel,
-    bool VerbalAvailable, bool SomaticAvailable);
+    bool VerbalAvailable, bool SomaticAvailable, Cover SourceCover = Cover.None);
 public sealed record AttackCombatant(Guid CombatantId, WeaponAttackOptions Attack,
     HellishRebukeReaction? Reaction = null, long? ExpectedRevision = null);
 public sealed record CastCombatSpell(Guid CombatantId, string ClassId, string SpellId,
     SpellSlotPoolKind? Pool, int SpellLevel, SpellTargetContext[] Targets,
     bool VerbalAvailable, bool SomaticAvailable, bool MaterialAvailable, long ExpectedRevision,
     MetamagicOption? Metamagic = null, int? AreaCenterDistanceFeet = null,
-    Guid? MetamagicTargetId = null);
+    Guid? MetamagicTargetId = null, HellishRebukeReaction? Reaction = null);
 public sealed record CombatConvertSpellSlot(Guid CombatantId, SpellSlotPoolKind Pool,
     int SpellLevel, long ExpectedRevision);
 public sealed record CombatCreateSorcerySlot(Guid CombatantId, int SpellLevel, long ExpectedRevision);
