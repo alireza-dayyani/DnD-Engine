@@ -24,6 +24,8 @@ The ninth increment adds immutable pack 5 with Hellish Rebuke, leaving packs 1�
 
 The tenth increment extends that reaction to direct single-target spell damage. The cast request can declare Hellish Rebuke for its target, and the cast response includes the reaction's save, damage and slot result. The defender's declared source cover modifies the Dexterity save. A miss, successful save with zero applied damage, or a defender left unable to act does not spend the reaction. The original spell and retaliatory spell commit in the same encounter transaction. Area and multi-beam spell casts reject declared reactions until the engine models their reaction order explicitly.
 
+The eleventh increment introduces deterministic campaign game time as elapsed seconds with an optimistic revision. A new audit-backed advance command persists time across restart, rejects stale revisions and cannot run while campaign combatants remain in an unfinished encounter. Existing databases gain zero-initialized clock columns through an additive migration. This is the time foundation for ritual casting and duration checks; it does not yet cast a ritual.
+
 Source research: [official SRD 5.2.1 PDF](https://media.dndbeyond.com/compendium-images/srd/5.2/SRD_CC_v5.2.1.pdf), multiclass spellcasting pp. 23–25; Bard p. 30, Cleric p. 35, Druid p. 40, Paladin p. 52, Ranger p. 57, Sorcerer p. 64, Warlock pp. 70–71, Wizard p. 76; spellcasting rules pp. 103–106; Concentration p. 178. `RULES_SOURCES.md` records this source boundary.
 
 ## Delivered boundary and follow-on work
@@ -34,6 +36,6 @@ The Phase 4 foundation criteria above now have executable paths: cantrips and ve
 2. Complete inventory economics and spatial adjudication. Pack 4 checks the specific priced Circle of Death item in inventory, but acquisition currently records an item without a purchase or appraisal transaction. Component access, sight, cover, range, cone/sphere membership and special senses still rely on caller-supplied facts. The engine has no map, held-object model or proof that every creature in an area was included.
 3. Add rituals, area and multi-beam reaction timing, more reaction spells, more concentration and ongoing effects, Wizard copying and ritual casting, feature interactions and spell attack/save modifiers. The full SRD magic system is **not complete**.
 
-The next increment should model a ritual spell with explicit elapsed time and an executable effect. The campaign has no game-time clock yet, so that foundation must precede time-limited ritual effects.
+The next increment should model a ritual spell with explicit elapsed time and an executable effect using the new campaign clock.
 
-Current validation: `dotnet test DndEngine.slnx --no-restore` passes 148 domain, 10 application and 50 integration tests. Automated coverage verifies the implemented routes and persistence; it does not establish full SRD spell coverage, geometry or combat balance.
+Current validation: `dotnet test DndEngine.slnx --no-restore` passes 148 domain, 10 application and 51 integration tests. Automated coverage verifies the implemented routes and persistence; it does not establish full SRD spell coverage, geometry or combat balance.

@@ -26,6 +26,8 @@ app.MapPost("/campaigns", async (CreateCampaign request, CampaignService service
     var result = await service.CreateAsync(request, ct); return Results.Created($"/campaigns/{result.Id}", result);
 });
 app.MapGet("/campaigns/{id:guid}", (Guid id, CampaignService service, CancellationToken ct) => service.GetAsync(id, ct));
+app.MapPost("/campaigns/{id:guid}/time/advance", (Guid id, AdvanceCampaignTime request,
+    CampaignService service, CancellationToken ct) => service.AdvanceTimeAsync(id, request, ct));
 app.MapGet("/campaigns/{id:guid}/events", (Guid id, long? after, int? limit, CampaignService service, CancellationToken ct) => service.EventsAsync(id, after ?? 0, limit ?? 100, ct));
 app.MapPost("/characters", async (CreateCharacter request, CharacterService service, CancellationToken ct) => {
     var result = await service.CreateAsync(request, ct); return Results.Created($"/characters/{result.Id}", result);

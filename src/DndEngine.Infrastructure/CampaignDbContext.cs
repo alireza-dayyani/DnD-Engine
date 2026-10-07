@@ -7,6 +7,8 @@ public sealed class CampaignRow
     public string Name { get; set; } = "";
     public string RulesetId { get; set; } = "";
     public string SrdVersion { get; set; } = "";
+    public long GameSeconds { get; set; }
+    public long Revision { get; set; }
 }
 public sealed class CharacterRow
 {
@@ -47,6 +49,7 @@ public sealed class CampaignDbContext(DbContextOptions<CampaignDbContext> option
     protected override void OnModelCreating(ModelBuilder model)
     {
         model.Entity<CampaignRow>().HasKey(x => x.Id);
+        model.Entity<CampaignRow>().Property(x => x.Revision).IsConcurrencyToken();
         model.Entity<CombatProfileRow>().HasKey(x => x.CharacterId);
         model.Entity<ProgressionRow>().HasKey(x => x.CharacterId);
         model.Entity<ProgressionRow>().HasOne<CharacterRow>().WithMany().HasForeignKey(x => x.CharacterId).OnDelete(DeleteBehavior.Restrict);

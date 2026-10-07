@@ -238,17 +238,27 @@ public class CombatIntegrationTests
             await rules.GetService<IMigrator>().MigrateAsync(rules.Database.GetMigrations().First());
             await campaign.GetService<IMigrator>().MigrateAsync(campaign.Database.GetMigrations().First());
             await RulesCatalog.ImportAsync(rules); hash = (await rules.Rulesets.SingleAsync()).ContentHash;
-            var c = await s.GetRequiredService<CampaignService>().CreateAsync(new("Existing Phase 1 campaign")); campaignId = c.Id;
-            var character = await s.GetRequiredService<CharacterService>().CreateAsync(Sheet(c.Id, "Old character")); characterId = character.Id;
-            await s.GetRequiredService<MechanicsService>().DamageAsync(characterId, new(7));
-            oldEvents = JsonSerializer.Serialize(await s.GetRequiredService<CampaignService>().EventsAsync(campaignId), Json);
+            campaignId = Guid.NewGuid(); characterId = Guid.NewGuid();
+            await campaign.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO Campaigns (Id,Name,RulesetId,SrdVersion) VALUES ({campaignId},{"Existing Phase 1 campaign"},{Ruleset.Current.Id},{Ruleset.Current.Version})");
+            campaign.Characters.Add(new CharacterRow { Id=characterId,CampaignId=campaignId,Name="Old character",
+                Level=1,ArmorClass=12,Revision=0,
+                AbilitiesJson=JsonSerializer.Serialize(Enum.GetValues<Ability>().ToDictionary(x=>x,_=>10)),
+                SkillsJson="[]",SavesJson="[]",
+                HealthJson=JsonSerializer.Serialize(new HealthState(20,13,0,false,false,0,0,false)) });
+            campaign.Events.Add(new EventRow { EventId=Guid.NewGuid(),CampaignId=campaignId,
+                CharacterId=characterId,Type="PhaseOneFixture",OccurredAtUtc=DateTimeOffset.UtcNow,
+                RulesetId=Ruleset.Current.Id,SrdVersion=Ruleset.Current.Version,
+                SchemaVersion=1,CharacterRevision=0,DataJson="{}" });
+            await campaign.SaveChangesAsync();
+            oldEvents = JsonSerializer.Serialize(await campaign.Events.AsNoTracking().ToArrayAsync(),Json);
         }
         await using (var provider = Provider(path, new FixedDiceRoller()))
         {
             await provider.InitializeDndEngineAsync();
             await using var scope = provider.CreateAsyncScope(); var s = scope.ServiceProvider;
             Assert.Equal(13, (await s.GetRequiredService<CharacterService>().GetAsync(characterId)).Health.Current);
-            Assert.Equal(oldEvents, JsonSerializer.Serialize(await s.GetRequiredService<CampaignService>().EventsAsync(campaignId), Json));
+            Assert.Equal(oldEvents, JsonSerializer.Serialize(await s.GetRequiredService<CampaignDbContext>()
+                .Events.AsNoTracking().ToArrayAsync(),Json));
             Assert.Equal(hash, (await s.GetRequiredService<RulesDbContext>().Rulesets.SingleAsync()).ContentHash);
             await s.GetRequiredService<CombatService>().ImportAsync(characterId, Capabilities());
             Assert.Equal(30, (await s.GetRequiredService<CombatService>().ProfileAsync(characterId)).Capabilities.Speed);

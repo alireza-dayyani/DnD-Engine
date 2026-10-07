@@ -7,7 +7,8 @@ public sealed class NotFoundException(string message) : Exception(message);
 public sealed class StateConflictException(string message) : Exception(message);
 
 public sealed record CreateCampaign(string Name, string RulesetId = "dnd-5.5", string SrdVersion = "5.2.1");
-public sealed record CampaignView(Guid Id, string Name, Ruleset Ruleset);
+public sealed record CampaignView(Guid Id, string Name, Ruleset Ruleset, long GameSeconds = 0, long Revision = 0);
+public sealed record AdvanceCampaignTime(long Seconds, long ExpectedRevision);
 public sealed record CreateCharacter(Guid CampaignId, string Name, int Level, Dictionary<Ability, int> Abilities,
     string[] SkillProficiencies, Ability[] SavingThrowProficiencies, int MaximumHp, int? ArmorClass = null);
 public sealed record CharacterView(Guid Id, Guid CampaignId, string Name, int Level, int ProficiencyBonus,
@@ -46,6 +47,8 @@ public interface ICampaignStore
     Task<Campaign?> GetCampaignAsync(Guid id, CancellationToken ct);
     Task<Character?> GetCharacterAsync(Guid id, CancellationToken ct);
     Task CreateCampaignAsync(Campaign campaign, CampaignEvent entry, CancellationToken ct);
+    Task<bool> HasUnfinishedEncounterAsync(Guid campaignId, CancellationToken ct);
+    Task SaveCampaignTimeAsync(Campaign before, Campaign after, CampaignEvent entry, CancellationToken ct);
     Task CreateCharacterAsync(Character character, CampaignEvent entry, CancellationToken ct);
     Task SaveCharacterAsync(Character character, CampaignEvent entry, CancellationToken ct);
     Task<IReadOnlyList<CampaignEvent>> GetEventsAsync(Guid campaignId, long after, int limit, CancellationToken ct);

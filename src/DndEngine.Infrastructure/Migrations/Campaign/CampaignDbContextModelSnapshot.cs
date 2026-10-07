@@ -23,6 +23,9 @@ namespace DndEngine.Infrastructure.Migrations.Campaign
                         .ValueGeneratedOnAdd()
                         .HasColumnType("TEXT");
 
+                    b.Property<long>("GameSeconds")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("TEXT");
@@ -30,6 +33,10 @@ namespace DndEngine.Infrastructure.Migrations.Campaign
                     b.Property<string>("RulesetId")
                         .IsRequired()
                         .HasColumnType("TEXT");
+
+                    b.Property<long>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("SrdVersion")
                         .IsRequired()

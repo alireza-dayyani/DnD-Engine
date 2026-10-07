@@ -118,6 +118,10 @@ public class UseCaseTests
         public Task<Character?> GetCharacterAsync(Guid id,CancellationToken ct)=>Task.FromResult(characters.GetValueOrDefault(id));
         public Task CreateCampaignAsync(Campaign campaign,CampaignEvent entry,CancellationToken ct)
         { campaigns.Add(campaign.Id,campaign); Events.Add(entry); return Task.CompletedTask; }
+        public Task<bool> HasUnfinishedEncounterAsync(Guid campaignId,CancellationToken ct) =>
+            Task.FromResult(false);
+        public Task SaveCampaignTimeAsync(Campaign before,Campaign after,CampaignEvent entry,CancellationToken ct)
+        { campaigns[after.Id]=after; Events.Add(entry); return Task.CompletedTask; }
         public Task CreateCharacterAsync(Character character,CampaignEvent entry,CancellationToken ct)
         { characters.Add(character.Id,character); Events.Add(entry); return Task.CompletedTask; }
         public Task SaveCharacterAsync(Character c,CampaignEvent entry,CancellationToken ct)

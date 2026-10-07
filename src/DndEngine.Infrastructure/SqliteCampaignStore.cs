@@ -9,7 +9,8 @@ public sealed class SqliteCampaignStore(CampaignDbContext db) : ICampaignStore
     public async Task<Campaign?> GetCampaignAsync(Guid id, CancellationToken ct)
     {
         var row = await db.Campaigns.AsNoTracking().SingleOrDefaultAsync(x => x.Id == id, ct);
-        return row is null ? null : new(row.Id, row.Name, new(row.RulesetId, row.SrdVersion));
+        return row is null ? null : new(row.Id, row.Name, new(row.RulesetId, row.SrdVersion),
+            row.GameSeconds,row.Revision);
     }
     public async Task<Character?> GetCharacterAsync(Guid id, CancellationToken ct)
     {
@@ -21,10 +22,29 @@ public sealed class SqliteCampaignStore(CampaignDbContext db) : ICampaignStore
     }
     public async Task CreateCampaignAsync(Campaign campaign, CampaignEvent entry, CancellationToken ct)
     {
-        db.Campaigns.Add(new() { Id = campaign.Id, Name = campaign.Name, RulesetId = campaign.Ruleset.Id, SrdVersion = campaign.Ruleset.Version });
+        db.Campaigns.Add(new() { Id = campaign.Id, Name = campaign.Name, RulesetId = campaign.Ruleset.Id,
+            SrdVersion = campaign.Ruleset.Version, GameSeconds = campaign.GameSeconds, Revision = campaign.Revision });
         db.Events.Add(ToRow(entry));
         await db.SaveChangesAsync(ct);
         db.ChangeTracker.Clear();
+    }
+    public Task<bool> HasUnfinishedEncounterAsync(Guid campaignId, CancellationToken ct) =>
+        db.CombatMemberships.AsNoTracking().AnyAsync(m =>
+            db.Encounters.Any(e => e.Id == m.EncounterId && e.CampaignId == campaignId),ct);
+
+    public async Task SaveCampaignTimeAsync(Campaign before, Campaign after, CampaignEvent entry, CancellationToken ct)
+    {
+        if (before.Id != after.Id || after.Revision != before.Revision+1 ||
+            after.GameSeconds <= before.GameSeconds)
+            throw new RuleViolation("Invalid campaign time transition.");
+        var row = await db.Campaigns.SingleAsync(x => x.Id == before.Id,ct);
+        row.GameSeconds = after.GameSeconds;
+        row.Revision = after.Revision;
+        db.Entry(row).Property(x => x.Revision).OriginalValue = before.Revision;
+        db.Events.Add(ToRow(entry));
+        try { await db.SaveChangesAsync(ct); }
+        catch (DbUpdateConcurrencyException) { throw new StateConflictException("Campaign time changed concurrently. Reload before trying again."); }
+        finally { db.ChangeTracker.Clear(); }
     }
     public async Task CreateCharacterAsync(Character character, CampaignEvent entry, CancellationToken ct)
     {

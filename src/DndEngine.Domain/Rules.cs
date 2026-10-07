@@ -48,9 +48,17 @@ public sealed record Campaign
     public Guid Id { get; }
     public string Name { get; }
     public Ruleset Ruleset { get; }
-    public Campaign(Guid id, string name, Ruleset ruleset)
+    public long GameSeconds { get; }
+    public long Revision { get; }
+    public Campaign(Guid id, string name, Ruleset ruleset, long gameSeconds = 0, long revision = 0)
     {
-        if (id == Guid.Empty) throw new RuleViolation("Campaign ID is required.");
+        if (id == Guid.Empty || gameSeconds < 0 || revision < 0) throw new RuleViolation("Invalid campaign state.");
         Id = id; Name = Guard.Name(name); Ruleset = ruleset;
+        GameSeconds = gameSeconds; Revision = revision;
+    }
+    public Campaign AdvanceTime(long seconds)
+    {
+        if (seconds is < 1 or > 31_536_000) throw new RuleViolation("Time advance must be between 1 second and 1 year.");
+        return new(Id,Name,Ruleset,checked(GameSeconds+seconds),checked(Revision+1));
     }
 }

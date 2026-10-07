@@ -1,5 +1,7 @@
 # Magic API: Phase 4 bounded engine
 
+`GET /campaigns/{id}` includes `gameSeconds` and a campaign `revision`. `POST /campaigns/{id}/time/advance` accepts `{"seconds":600,"expectedRevision":n}` to advance deterministic game time between unfinished encounters. The update and audit event are atomic. This clock is separate from UTC event timestamps; existing campaigns migrate at game second zero.
+
 All commands use camelCase JSON and string enum values. Read `GET /spells` for the current immutable spell pack or `GET /spells?packVersion=1` through `=4` for older packs. New characters pin pack 5; old characters retain their pin. `POST /characters/{id}/spell-pack/adopt` accepts `{"packVersion":"5","expectedRevision":n,"knownCantrips":[{"classId":"bard","spellId":"vicious-mockery"}]}`. Adoption is explicit, checks all existing choices against the new pack, appends an audit event, and cannot run while the character is enrolled in an unfinished encounter.
 
 Pack 4 retains pack 3's seven spells and adds Poison Spray, Eldritch Blast and Vicious Mockery. Pack 5 adds Hellish Rebuke. It is intentionally small. A selected spell must belong to the character's class list unless a modeled class feature grants it. Current feature grant: a level 3+ Fiend Warlock always has Burning Hands prepared without counting against chosen preparation. Unsupported spell effects cannot be cast.

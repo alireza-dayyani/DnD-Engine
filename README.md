@@ -39,6 +39,7 @@ Phase 3 adds a choice-based path to create an SRD character and derive its mecha
 |---|---|---|
 | GET | `/health` | Startup readiness and supported ruleset |
 | POST / GET | `/campaigns`, `/campaigns/{id}` | Create/read campaign and immutable rules pin |
+| POST | `/campaigns/{id}/time/advance` | Advance revisioned campaign game time between encounters |
 | POST / GET | `/characters`, `/characters/{id}` | Import/read mechanical sheet |
 | GET / POST | `/character-choices`, `/srd-characters` | Read choices/create choice-based SRD character |
 | GET / POST | `/characters/{id}/sheet`, `/characters/{id}/level-up` | Derived sheet and progression |

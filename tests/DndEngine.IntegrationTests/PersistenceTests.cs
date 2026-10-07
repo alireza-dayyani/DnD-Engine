@@ -18,6 +18,39 @@ public class PersistenceTests
             Enum.GetValues<Ability>().ToDictionary(x=>x,_=>18),["deception"],[Ability.Wisdom],20));
     }
     [Fact]
+    public async Task CampaignGameTimeIsRevisionedAndCannotAdvanceDuringEncounter()
+    {
+        var path=DirectoryPath(); Guid campaignId;
+        await using(var provider=Provider(path))
+        {
+            await provider.InitializeDndEngineAsync();
+            await using var scope=provider.CreateAsyncScope(); var services=scope.ServiceProvider;
+            var campaigns=services.GetRequiredService<CampaignService>();
+            var campaign=await campaigns.CreateAsync(new("Clock")); campaignId=campaign.Id;
+            Assert.Equal(0,campaign.GameSeconds); Assert.Equal(0,campaign.Revision);
+            var advanced=await campaigns.AdvanceTimeAsync(campaign.Id,new(606,campaign.Revision));
+            Assert.Equal(606,advanced.GameSeconds); Assert.Equal(1,advanced.Revision);
+            await Assert.ThrowsAsync<StateConflictException>(()=>campaigns.AdvanceTimeAsync(campaign.Id,new(1,0)));
+            await Assert.ThrowsAsync<RuleViolation>(()=>campaigns.AdvanceTimeAsync(campaign.Id,new(-1,1)));
+            var character=await services.GetRequiredService<CharacterService>().CreateAsync(new(campaign.Id,
+                "Clock witness",1,Enum.GetValues<Ability>().ToDictionary(x=>x,_=>10),[],[],10));
+            var combat=services.GetRequiredService<CombatService>();
+            await combat.ImportAsync(character.Id,new(30,[],[],[],[],[]));
+            var encounter=await combat.CreateAsync(campaign.Id,new("Unfinished"));
+            await combat.AddAsync(encounter.Id,new(character.Id));
+            await Assert.ThrowsAsync<RuleViolation>(()=>campaigns.AdvanceTimeAsync(campaign.Id,new(60,1)));
+        }
+        await using(var provider=Provider(path))
+        {
+            await provider.InitializeDndEngineAsync();
+            await using var scope=provider.CreateAsyncScope(); var services=scope.ServiceProvider;
+            var campaigns=services.GetRequiredService<CampaignService>();
+            var campaign=await campaigns.GetAsync(campaignId);
+            Assert.Equal(606,campaign.GameSeconds); Assert.Equal(1,campaign.Revision);
+            Assert.Single(await campaigns.EventsAsync(campaignId),x=>x.Type=="CampaignTimeAdvanced");
+        }
+    }
+    [Fact]
     public async Task CampaignCharacterDamageHealingAndEventsSurviveNewProvider()
     {
         var path=DirectoryPath(); Guid id; Guid campaignId;
@@ -46,7 +79,7 @@ public class PersistenceTests
             Assert.Equal(18,events[2].Data.GetProperty("total").GetInt32());
             Assert.Equal(2,(await services.GetRequiredService<CampaignService>().EventsAsync(campaignId,events[4].Sequence)).Count);
             Assert.Equal(18,await services.GetRequiredService<RulesDbContext>().Skills.CountAsync());
-            Assert.Equal(3,(await services.GetRequiredService<CampaignDbContext>().Database.GetAppliedMigrationsAsync()).Count());
+            Assert.Equal(4,(await services.GetRequiredService<CampaignDbContext>().Database.GetAppliedMigrationsAsync()).Count());
             Assert.False(services.GetRequiredService<CampaignDbContext>().Database.HasPendingModelChanges());
             Assert.False(services.GetRequiredService<RulesDbContext>().Database.HasPendingModelChanges());
         }
