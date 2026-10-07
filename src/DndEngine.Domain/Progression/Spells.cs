@@ -3,7 +3,7 @@ using DndEngine.Domain.Combat;
 
 namespace DndEngine.Domain.Progression;
 
-public enum SpellEffectKind { SelfHealing, SpellAttack, SavingThrowDamage, Blur }
+public enum SpellEffectKind { SelfHealing, SpellAttack, SavingThrowDamage, Blur, LanguageComprehension }
 
 public static class SpellPackVersions
 {
@@ -11,7 +11,8 @@ public static class SpellPackVersions
     public const string Second = "2";
     public const string Previous = "3";
     public const string Fourth = "4";
-    public const string Current = "5";
+    public const string Fifth = "5";
+    public const string Current = "6";
 }
 
 public sealed record SpellDefinition(string Id, string Name, int Level, string[] ClassIds,
@@ -20,7 +21,8 @@ public sealed record SpellDefinition(string Id, string Name, int Level, string[]
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] SpellDamage? Damage = null,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] int ConcentrationTurns = 0,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] int MaterialCostGp = 0,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? MaterialItemId = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? MaterialItemId = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool Ritual = false);
 
 public sealed record SpellDamage(DamageType Type, int BaseDice, int DieSides, Ability? SaveAbility = null,
     int DicePerHigherSlot = 0, bool HalfOnSave = false, bool IgnoreCover = false, bool Area = false);
@@ -81,7 +83,7 @@ public static class FeatureSpells
 {
     public static PreparedSpell[] AlwaysPrepared(ProgressionState state)
     {
-        if (state.SpellPackVersion is not (SpellPackVersions.Previous or SpellPackVersions.Fourth or SpellPackVersions.Current)) return [];
+        if (state.SpellPackVersion is not (SpellPackVersions.Previous or SpellPackVersions.Fourth or SpellPackVersions.Fifth or SpellPackVersions.Current)) return [];
         var warlock = state.Classes.SingleOrDefault(x => x.ClassId == "warlock");
         return warlock is { Level: >= 3 } &&
             (state.SubclassIds ?? []).GetValueOrDefault("warlock") == "fiend-patron"

@@ -33,6 +33,18 @@ public sealed record CastPreparedSpell(string ClassId, string SpellId, SpellSlot
     long ExpectedRevision, bool ComponentsAvailable);
 public sealed record SpellCastResult(CharacterSheet Sheet, string ClassId, string SpellId, SpellSlotPoolKind Pool,
     int SpellLevel, int[] Rolls, int AbilityModifier, int HitPointsRegained);
+public sealed record CastLanguageSpell(string ClassId, bool Ritual, SpellSlotPoolKind? Pool,
+    int SpellLevel, bool VerbalAvailable, bool SomaticAvailable, bool MaterialAvailable,
+    long ExpectedCharacterRevision, long ExpectedCampaignRevision,
+    bool SpellbookAvailable = false, bool Uninterrupted = false);
+public sealed record LanguageSpellCastResult(CharacterSheet Sheet, string SpellId, bool Ritual,
+    SpellSlotPoolKind? Pool, int? SlotBefore, long CompletedAtGameSecond,
+    long ExpiresAtGameSecond, long CampaignRevision);
+public enum LanguageMedium { Heard, Signed, Written }
+public sealed record CheckLanguageComprehension(LanguageMedium Medium, bool Perceived,
+    bool TouchingSurface = false);
+public sealed record LanguageComprehensionResult(LanguageMedium Medium, bool SpellActive,
+    bool UnderstandsLiteralMeaning, long CurrentGameSecond, long ExpiresAtGameSecond);
 public sealed record RestResult(CharacterSheet Sheet, int[] HitDieRolls, int HitPointsRegained,
     ResourceState[] ResourceChanges, string[] OtherChanges);
 public sealed record CharacterChoices(CharacterRules Rules);
@@ -51,6 +63,9 @@ public interface IProgressionStore
     Task CreateAsync(Character character, ProgressionState state, DndEngine.Domain.Combat.CombatProfile profile,
         CampaignEvent entry, CancellationToken ct);
     Task SaveAsync(Character character, ProgressionState state, DndEngine.Domain.Combat.CombatProfile profile,
+        CampaignEvent entry, CancellationToken ct);
+    Task SaveWithCampaignTimeAsync(Character character, ProgressionState state,
+        DndEngine.Domain.Combat.CombatProfile profile, Campaign before, Campaign after,
         CampaignEvent entry, CancellationToken ct);
     Task<bool> IsEnrolledAsync(Guid characterId, CancellationToken ct);
 }

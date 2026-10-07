@@ -26,6 +26,8 @@ public static class ProgressionEndpoints
         app.MapPost("/characters/{id:guid}/spell-slots/convert-to-points", (Guid id,ConvertSpellSlot request,ProgressionService service,CancellationToken ct) => service.ConvertSpellSlotAsync(id,request,ct));
         app.MapPost("/characters/{id:guid}/spell-slots/create", (Guid id,CreateSorcerySlot request,ProgressionService service,CancellationToken ct) => service.CreateSorcerySlotAsync(id,request,ct));
         app.MapPost("/characters/{id:guid}/spells/cast-self", (Guid id,CastPreparedSpell request,ProgressionService service,CancellationToken ct) => service.CastPreparedSpellAsync(id,request,ct));
+        app.MapPost("/characters/{id:guid}/spells/comprehend-languages/cast", (Guid id,CastLanguageSpell request,ProgressionService service,CancellationToken ct) => service.CastLanguageSpellAsync(id,request,ct));
+        app.MapPost("/characters/{id:guid}/spells/comprehend-languages/check", (Guid id,CheckLanguageComprehension request,ProgressionService service,CancellationToken ct) => service.CheckLanguageComprehensionAsync(id,request,ct));
         app.MapPost("/characters/{id:guid}/spell-pack/adopt", (Guid id,AdoptSpellPack request,ProgressionService service,CancellationToken ct) => service.AdoptSpellPackAsync(id,request,ct));
         app.MapPost("/characters/{id:guid}/rests/short", (Guid id,ShortRestRequest request,ProgressionService service,CancellationToken ct) => service.ShortRestAsync(id,request,ct));
         app.MapPost("/characters/{id:guid}/rests/long", (Guid id,LongRestRequest request,ProgressionService service,CancellationToken ct) => service.LongRestAsync(id,request,ct));

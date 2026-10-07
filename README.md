@@ -1,6 +1,6 @@
 # D&D campaign engine — Phase 4 foundation
 
-A local .NET 10 backend for SRD 5.2.1 character choices and progression, weapon combat, persistent campaign state, and an audit timeline. A future AI Dungeon Master supplies interpretation and narration; the engine owns dice and state. Phase 4 delivers a bounded eleven-spell magic engine with versioned choices, combat casting and persistent effects. It is not a complete SRD spell implementation. There are no AI calls, MCP or graphical UI.
+A local .NET 10 backend for SRD 5.2.1 character choices and progression, weapon combat, persistent campaign state, and an audit timeline. A future AI Dungeon Master supplies interpretation and narration; the engine owns dice and state. Phase 4 delivers a bounded twelve-spell magic engine with versioned choices, combat casting, one out-of-combat ritual and persistent effects. It is not a complete SRD spell implementation. There are no AI calls, MCP or graphical UI.
 
 ## Run
 
@@ -44,9 +44,10 @@ Phase 3 adds a choice-based path to create an SRD character and derive its mecha
 | GET / POST | `/character-choices`, `/srd-characters` | Read choices/create choice-based SRD character |
 | GET / POST | `/characters/{id}/sheet`, `/characters/{id}/level-up` | Derived sheet and progression |
 | GET | `/characters/{id}/spellcasting` | Casting abilities and current/maximum slot balances |
-| GET | `/spells` | Read an immutable spell pack (current pack 5 by default) |
+| GET | `/spells` | Read an immutable spell pack (current pack 6 by default) |
 | POST | `/characters/{id}/spell-slots/spend` | Record one shared or Pact Magic slot expenditure |
 | POST | `/characters/{id}/spells/cast-self` | Cast a prepared self-healing spell on the caster outside combat |
+| POST | `/characters/{id}/spells/comprehend-languages/cast`, `/check` | Cast and check a timed language-comprehension effect |
 | POST | `/characters/{id}/spell-pack/adopt` | Explicitly adopt current spell content |
 | POST | `/combat/{id}/spells/cast` | Cast an implemented spell in an active encounter |
 | POST | `/characters/{id}/inventory`, `/inventory/equip`, `/inventory/unequip`, `/inventory/remove` | Acquire and equip items |

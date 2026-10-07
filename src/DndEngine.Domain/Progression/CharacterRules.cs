@@ -53,7 +53,8 @@ public sealed record ProgressionState(string SpeciesId, string? SpeciesVariantId
     KnownCantrip[]? KnownCantrips = null, string[]? WizardSpellbookIds = null,
     MetamagicOption[]? MetamagicOptions = null, int SorceryPointsSpent = 0,
     Dictionary<int,string>? MysticArcanumChoices = null, int[]? MysticArcanumSpentLevels = null,
-    bool ArcaneRecoveryUsed = false, bool SorcerousRestorationUsed = false);
+    bool ArcaneRecoveryUsed = false, bool SorcerousRestorationUsed = false,
+    long ComprehendLanguagesUntilGameSecond = 0);
 
 public sealed record StatisticPart(string Source, int Value);
 public sealed record DerivedStatistic(int Total, StatisticPart[] Parts);

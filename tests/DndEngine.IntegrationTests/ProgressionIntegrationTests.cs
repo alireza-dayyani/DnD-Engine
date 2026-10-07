@@ -231,7 +231,7 @@ public sealed class ProgressionIntegrationTests
             Assert.Contains(sheet.PreparedSpells!,x=>x.SpellId=="cure-wounds");
             var events=await services.GetRequiredService<CampaignService>().EventsAsync(sheet.CampaignId);
             Assert.Contains(events,x=>x.Type=="SpellCast");
-            Assert.Equal(11,(await service.SpellChoicesAsync()).Length);
+            Assert.Equal(12,(await service.SpellChoicesAsync()).Length);
         }
     }
 
@@ -270,7 +270,8 @@ public sealed class ProgressionIntegrationTests
             Assert.Single(await catalog.GetAsync(Ruleset.Current,SpellPackVersions.Initial,default));
             Assert.Equal(7,(await catalog.GetAsync(Ruleset.Current,SpellPackVersions.Previous,default)).Length);
             Assert.Equal(10,(await catalog.GetAsync(Ruleset.Current,SpellPackVersions.Fourth,default)).Length);
-            Assert.Equal(11,(await catalog.GetAsync(Ruleset.Current,SpellPackVersions.Current,default)).Length);
+            Assert.Equal(11,(await catalog.GetAsync(Ruleset.Current,SpellPackVersions.Fifth,default)).Length);
+            Assert.Equal(12,(await catalog.GetAsync(Ruleset.Current,SpellPackVersions.Current,default)).Length);
             await services.GetRequiredService<MechanicsService>().DamageAsync(id,new(6));
             sheet=await service.SheetAsync(id);
             var cast=await service.CastPreparedSpellAsync(id,
@@ -365,7 +366,7 @@ public sealed class ProgressionIntegrationTests
             await using var scope=provider.CreateAsyncScope();
             var rules=scope.ServiceProvider.GetRequiredService<RulesDbContext>();
             Assert.Equal(initialHash,(await rules.SpellContent.SingleAsync()).ContentHash);
-            Assert.Equal(4,(await rules.SpellPacks.ToArrayAsync()).Length);
+            Assert.Equal(5,(await rules.SpellPacks.ToArrayAsync()).Length);
             Assert.False(rules.Database.HasPendingModelChanges());
         }
     }

@@ -1,5 +1,9 @@
 # Rules sources and license
 
+## Phase 4 pack 6 ritual follow-on (2026-10-07)
+
+The [official SRD 5.2.1 PDF](https://media.dndbeyond.com/compendium-images/srd/5.2/SRD_CC_v5.2.1.pdf) gives general ritual casting at printed pp. 103–104 and Comprehend Languages at printed p. 117. Ritual casting adds 10 minutes to the normal casting time and spends no slot; longer casting needs repeated Magic actions and concentration during the cast. Comprehend Languages has an Action or Ritual casting time, self range, V/S/M (soot and salt), one-hour duration, and grants literal comprehension of heard, seen signed and touched written language. Wizard Ritual Adept at printed p. 78 permits an unprepared ritual from the spellbook if the Wizard reads it. The engine represents the uninterrupted long cast as a caller assertion and advances its deterministic campaign clock by 606 seconds; it does not model every intervening turn or translate prose.
+
 ## Phase 4 pack 5 reaction follow-on (2026-10-07)
 
 The [official SRD 5.2.1 PDF](https://media.dndbeyond.com/compendium-images/srd/5.2/SRD_CC_v5.2.1.pdf) defines Hellish Rebuke on printed p. 140: a Warlock level 1 Reaction to damage from a visible creature within 60 feet, requiring V/S components; the source makes a Dexterity save against 2d10 Fire damage (half on success), with 1d10 per higher slot level. This implementation ties the trigger to positive applied damage from a weapon attack or direct single-target damaging spell and persists the reaction and spell slot in the same encounter transaction. Area and multi-beam reaction timing remains outside this path.

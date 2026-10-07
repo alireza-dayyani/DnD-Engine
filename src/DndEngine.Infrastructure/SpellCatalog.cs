@@ -98,7 +98,13 @@ public sealed class SpellCatalog(RulesDbContext db) : ISpellCatalog
                 SpellEffectKind.SavingThrowDamage,"SRD 5.2.1 p. 140",
                 Damage:new(DamageType.Fire,2,10,Ability.Dexterity,1,HalfOnSave:true))
         ];
-        await ImportPackAsync(db,SpellPackVersions.Current,fifth,ct);
+        await ImportPackAsync(db,SpellPackVersions.Fifth,fifth,ct);
+        SpellDefinition[] sixth = [..fifth,
+            new("comprehend-languages","Comprehend Languages",1,
+                ["bard","sorcerer","warlock","wizard"],"Action or Ritual","Self","V,S,M",
+                SpellEffectKind.LanguageComprehension,"SRD 5.2.1 p. 117",Ritual:true)
+        ];
+        await ImportPackAsync(db,SpellPackVersions.Current,sixth,ct);
     }
 
     private static async Task ImportPackAsync(RulesDbContext db,string version,SpellDefinition[] spells,CancellationToken ct)

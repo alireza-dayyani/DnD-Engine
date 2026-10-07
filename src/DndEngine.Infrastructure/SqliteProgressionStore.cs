@@ -44,6 +44,27 @@ public sealed class SqliteProgressionStore(CampaignDbContext db) : IProgressionS
         db.Events.Add(SqliteCampaignStore.ToRow(entry));
         await Commit(ct);
     }
+    public async Task SaveWithCampaignTimeAsync(Character character, ProgressionState state,
+        CombatProfile profile, Campaign before, Campaign after, CampaignEvent entry, CancellationToken ct)
+    {
+        if (character.CampaignId != before.Id || before.Id != after.Id ||
+            after.Revision != before.Revision+1 || after.GameSeconds <= before.GameSeconds)
+            throw new RuleViolation("Invalid spell time transition.");
+        var characterRow = SqliteCampaignStore.ToRow(character);
+        db.Attach(characterRow); characterRow.Revision = checked(character.Revision+1);
+        db.Entry(characterRow).State = EntityState.Modified;
+        db.Entry(characterRow).Property(x => x.Revision).OriginalValue = character.Revision;
+        var progression = await db.Progressions.SingleAsync(x => x.CharacterId == character.Id,ct);
+        progression.StateJson = JsonSerializer.Serialize(state,CombatCatalog.Json);
+        var combat = await db.CombatProfiles.SingleAsync(x => x.CharacterId == character.Id,ct);
+        combat.StateJson = JsonSerializer.Serialize(profile.State,CombatCatalog.Json);
+        var campaign = await db.Campaigns.SingleAsync(x => x.Id == before.Id,ct);
+        campaign.GameSeconds = after.GameSeconds;
+        campaign.Revision = after.Revision;
+        db.Entry(campaign).Property(x => x.Revision).OriginalValue = before.Revision;
+        db.Events.Add(SqliteCampaignStore.ToRow(entry));
+        await Commit(ct);
+    }
     private async Task Commit(CancellationToken ct)
     {
         try { await db.SaveChangesAsync(ct); }

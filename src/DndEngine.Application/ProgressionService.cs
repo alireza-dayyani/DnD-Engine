@@ -373,6 +373,92 @@ public sealed class ProgressionService(ICampaignStore campaigns, IProgressionSto
             rolls.Rolls.ToArray(),casting.AbilityModifier,change.HitPointsRegained);
     }
 
+    public async Task<LanguageSpellCastResult> CastLanguageSpellAsync(Guid id,
+        CastLanguageSpell request,CancellationToken ct = default)
+    {
+        var (character,state,rules,combat) = await Load(id,ct);
+        await RequireMutable(character,request.ExpectedCharacterRevision,ct);
+        var campaign = await campaigns.GetCampaignAsync(character.CampaignId,ct)
+            ?? throw new NotFoundException("Campaign not found.");
+        if (campaign.Revision != request.ExpectedCampaignRevision)
+            throw new StateConflictException("Campaign time changed. Reload before casting.");
+        if (await campaigns.HasUnfinishedEncounterAsync(campaign.Id,ct))
+            throw new RuleViolation("Long casting cannot proceed during an unfinished encounter.");
+        var spell = (await spellCatalog.GetAsync(campaign.Ruleset,
+            state.SpellPackVersion ?? SpellPackVersions.Initial,ct))
+            .SingleOrDefault(x => x.Id == "comprehend-languages")
+            ?? throw new RuleViolation("Comprehend Languages is not in the pinned spell pack.");
+        if (!spell.ClassIds.Contains(request.ClassId) ||
+            spell.Effect != SpellEffectKind.LanguageComprehension)
+            throw new RuleViolation("Class cannot cast this language spell.");
+        var prepared = (state.PreparedSpells ?? []).Any(x =>
+            x.ClassId == request.ClassId && x.SpellId == spell.Id);
+        var wizardBookRitual = request.Ritual && request.ClassId == "wizard" &&
+            (state.WizardSpellbookIds ?? []).Contains(spell.Id);
+        if (!prepared && !wizardBookRitual)
+            throw new RuleViolation("The spell must be prepared, or read from a Wizard spellbook as a ritual.");
+        if (!prepared && wizardBookRitual && !request.SpellbookAvailable)
+            throw new RuleViolation("The Wizard must read the spell from the available spellbook.");
+        if (request.Ritual && !request.Uninterrupted)
+            throw new RuleViolation("Ritual casting requires an uninterrupted long casting period.");
+        if (!request.VerbalAvailable || !request.SomaticAvailable || !request.MaterialAvailable)
+            throw new RuleViolation("Comprehend Languages requires verbal, somatic and soot-and-salt material components.");
+        var sheet = CharacterDeriver.Derive(character,state,rules,combat);
+        if (sheet.SpellcastingBlockedByArmor)
+            throw new RuleViolation("Untrained armor prevents spellcasting.");
+        var profile = await combatStore.GetProfileAsync(id,ct)
+            ?? throw new RuleViolation("Combat profile is missing.");
+        new ConditionEffects(character,profile).RequireAction();
+        character.Health.RequireAlive();
+        if (SpellSlotCalculator.Derive(character,state)?.Classes.Any(x => x.ClassId == request.ClassId) != true)
+            throw new RuleViolation("Class has no spellcasting feature.");
+        SpellSlotUsage? usage = null; int? slotBefore = null;
+        if (request.Ritual)
+        {
+            if (!spell.Ritual || request.Pool is not null || request.SpellLevel != spell.Level)
+                throw new RuleViolation("A ritual cannot use a slot or a higher spell level.");
+        }
+        else
+        {
+            if (request.Pool is null || request.SpellLevel < spell.Level)
+                throw new RuleViolation("A normal cast requires an eligible spell slot.");
+            (usage,slotBefore) = SpellSlotCalculator.Spend(character,state,request.Pool.Value,request.SpellLevel);
+        }
+        var after = campaign.AdvanceTime(request.Ritual ? 606 : 6);
+        var expires = checked(after.GameSeconds+3600);
+        var updated = state with { SpellSlots=usage ?? state.SpellSlots,
+            ComprehendLanguagesUntilGameSecond=expires };
+        var nextCharacter = Materialize(character.Id,character.CampaignId,character.Name,
+            updated,rules,combat,character.Health,character.Revision);
+        var resultSheet = CharacterDeriver.Derive(nextCharacter,updated,rules,combat);
+        var nextProfile = Profile(character.Id,resultSheet,combat,profile);
+        await progressions.SaveWithCampaignTimeAsync(nextCharacter,updated,nextProfile,campaign,after,
+            Event(character,"LanguageSpellCast",character.Revision+1,new {
+                spellId=spell.Id,request.ClassId,request.Ritual,request.Pool,request.SpellLevel,
+                slotBefore,completedAtGameSecond=after.GameSeconds,expiresAtGameSecond=expires }),ct);
+        return new(resultSheet with { Revision=character.Revision+1 },spell.Id,request.Ritual,
+            request.Pool,slotBefore,after.GameSeconds,expires,after.Revision);
+    }
+
+    public async Task<LanguageComprehensionResult> CheckLanguageComprehensionAsync(Guid id,
+        CheckLanguageComprehension request,CancellationToken ct = default)
+    {
+        Guard.Defined(request.Medium);
+        var character = await campaigns.GetCharacterAsync(id,ct)
+            ?? throw new NotFoundException("Character not found.");
+        var state = await progressions.GetAsync(id,ct)
+            ?? throw new RuleViolation("Character has no spellcasting progression.");
+        var campaign = await campaigns.GetCampaignAsync(character.CampaignId,ct)
+            ?? throw new NotFoundException("Campaign not found.");
+        if (state.ComprehendLanguagesUntilGameSecond < 0)
+            throw new RuleViolation("Invalid language spell duration.");
+        var active = state.ComprehendLanguagesUntilGameSecond > campaign.GameSeconds;
+        var understands = active && request.Perceived &&
+            (request.Medium != LanguageMedium.Written || request.TouchingSurface);
+        return new(request.Medium,active,understands,campaign.GameSeconds,
+            state.ComprehendLanguagesUntilGameSecond);
+    }
+
     public async Task<CharacterSheet> AdoptSpellPackAsync(Guid id, AdoptSpellPack request, CancellationToken ct = default)
     {
         var (character,state,rules,combat) = await Load(id,ct);

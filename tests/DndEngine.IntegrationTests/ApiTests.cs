@@ -80,11 +80,52 @@ public class ApiTests
     }
 
     [Fact]
+    public async Task HttpRitualUsesCampaignClockAndChecksWrittenTouch()
+    {
+        await using var app=new Factory(); using var client=app.CreateClient();
+        var campaign=await Post(client,"/campaigns",new { name="Ritual API" });
+        var campaignId=campaign.GetProperty("id").GetGuid();
+        var sheet=await Post(client,"/srd-characters",new {
+            campaignId,name="Ilyra",speciesId="dwarf",speciesVariantId=(string?)null,size="Medium",
+            backgroundId="criminal",classId="wizard",
+            baseAbilities=new { Strength=13,Dexterity=13,Constitution=13,Intelligence=13,Wisdom=13,Charisma=13 },
+            backgroundBonuses=new { Dexterity=2,Constitution=1 },classSkills=new[]{"arcana","history"},
+            wizardSpellbookIds=new[]{"comprehend-languages"}
+        });
+        var id=sheet.GetProperty("id").GetGuid();
+        var cast=await Post(client,$"/characters/{id}/spells/comprehend-languages/cast",new {
+            classId="wizard",ritual=true,pool=(string?)null,spellLevel=1,
+            verbalAvailable=true,somaticAvailable=true,materialAvailable=true,
+            expectedCharacterRevision=sheet.GetProperty("revision").GetInt64(),
+            expectedCampaignRevision=campaign.GetProperty("revision").GetInt64(),
+            spellbookAvailable=true,uninterrupted=true
+        });
+        Assert.Equal(606,cast.GetProperty("completedAtGameSecond").GetInt64());
+        var writing=await Post(client,$"/characters/{id}/spells/comprehend-languages/check",new {
+            medium="Written",perceived=true,touchingSurface=false
+        });
+        Assert.False(writing.GetProperty("understandsLiteralMeaning").GetBoolean());
+        var touched=await Post(client,$"/characters/{id}/spells/comprehend-languages/check",new {
+            medium="Written",perceived=true,touchingSurface=true
+        });
+        Assert.True(touched.GetProperty("understandsLiteralMeaning").GetBoolean());
+        campaign=await client.GetFromJsonAsync<JsonElement>($"/campaigns/{campaignId}");
+        Assert.Equal(606,campaign.GetProperty("gameSeconds").GetInt64());
+        await Post(client,$"/campaigns/{campaignId}/time/advance",new {
+            seconds=3600,expectedRevision=campaign.GetProperty("revision").GetInt64()
+        });
+        var expired=await Post(client,$"/characters/{id}/spells/comprehend-languages/check",new {
+            medium="Heard",perceived=true
+        });
+        Assert.False(expired.GetProperty("spellActive").GetBoolean());
+    }
+
+    [Fact]
     public async Task HttpPreparedCureWoundsHealsAndConsumesOneSlot()
     {
         await using var app=new Factory(3,4); using var client=app.CreateClient();
         var spells=await client.GetFromJsonAsync<JsonElement>("/spells");
-        Assert.Equal(11,spells.GetArrayLength());
+        Assert.Equal(12,spells.GetArrayLength());
         Assert.Equal("cure-wounds",spells[0].GetProperty("id").GetString());
         Assert.Equal("healing-word",spells[1].GetProperty("id").GetString());
         var third=await client.GetFromJsonAsync<JsonElement>("/spells?packVersion=3");
