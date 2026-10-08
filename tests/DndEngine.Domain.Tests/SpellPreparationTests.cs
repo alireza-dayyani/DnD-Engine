@@ -16,7 +16,10 @@ public class SpellPreparationTests
     {
         Assert.Equal(4,SpellPreparation.Capacity("bard",1));
         Assert.Equal(22,SpellPreparation.Capacity("bard",20));
-        Assert.Equal(2,SpellPreparation.Capacity("paladin",1));
+        Assert.Equal(0,SpellPreparation.Capacity("paladin",1));
+        Assert.Equal(0,SpellPreparation.Capacity("ranger",1));
+        Assert.Equal(0,SpellPreparation.MaximumSpellLevel("paladin",1));
+        Assert.Equal(0,SpellPreparation.MaximumSpellLevel("ranger",1));
         Assert.Equal(6,SpellPreparation.Capacity("ranger",5));
         Assert.Equal(4,SpellPreparation.Capacity("sorcerer",2));
         Assert.Equal(10,SpellPreparation.Capacity("warlock",9));

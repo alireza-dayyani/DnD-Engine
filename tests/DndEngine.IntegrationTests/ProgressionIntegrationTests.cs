@@ -23,6 +23,29 @@ public sealed class ProgressionIntegrationTests
         StartingItemIds:["chain-mail","greatsword"],MasteredWeaponIds:["greatsword"],FightingStyleFeat:"defense");
 
     [Fact]
+    public async Task FirstLevelHalfCastersHaveNoSpellcastingSlots()
+    {
+        var path=Path.Combine(Path.GetTempPath(),"DndEngine.HalfCasterTests",Guid.NewGuid().ToString("N"));
+        await using var provider=Provider(path);
+        await provider.InitializeDndEngineAsync();
+        await using var scope=provider.CreateAsyncScope(); var services=scope.ServiceProvider;
+        var campaign=await services.GetRequiredService<CampaignService>().CreateAsync(new("Half casters"));
+        var progression=services.GetRequiredService<ProgressionService>();
+        foreach (var classId in new[] { "paladin", "ranger" })
+        {
+            var sheet=await progression.CreateAsync(new(campaign.Id,classId,"dwarf",null,"Medium",
+                "criminal",classId,Enum.GetValues<Ability>().ToDictionary(x=>x,_=>13),
+                new() { [Ability.Dexterity]=2,[Ability.Constitution]=1 },
+                classId=="paladin" ? ["athletics","insight"] : ["athletics","perception","survival"]));
+            Assert.Empty(sheet.Spellcasting!.SharedSlots);
+            Assert.Equal(0,sheet.Spellcasting.Classes.Single().PreparedMaximum);
+            sheet=await progression.LevelUpAsync(sheet.Id,new(classId,sheet.Revision,
+                FightingStyleFeat:"defense"));
+            Assert.Equal(2,sheet.Spellcasting!.SharedSlots.Single().Maximum);
+        }
+    }
+
+    [Fact]
     public async Task FontOfMagicCreatedSlotAndConversionSurviveRestartThenExpireAtLongRest()
     {
         var path=Path.Combine(Path.GetTempPath(),"DndEngine.FontTests",Guid.NewGuid().ToString("N"));
@@ -271,7 +294,11 @@ public sealed class ProgressionIntegrationTests
             Assert.Equal(7,(await catalog.GetAsync(Ruleset.Current,SpellPackVersions.Previous,default)).Length);
             Assert.Equal(10,(await catalog.GetAsync(Ruleset.Current,SpellPackVersions.Fourth,default)).Length);
             Assert.Equal(11,(await catalog.GetAsync(Ruleset.Current,SpellPackVersions.Fifth,default)).Length);
-            Assert.Equal(12,(await catalog.GetAsync(Ruleset.Current,SpellPackVersions.Current,default)).Length);
+            Assert.Equal(12,(await catalog.GetAsync(Ruleset.Current,SpellPackVersions.Sixth,default)).Length);
+            Assert.Equal(SpellEffectKind.SpellAttack,(await catalog.GetAsync(Ruleset.Current,SpellPackVersions.Sixth,default))
+                .Single(x=>x.Id=="poison-spray").Effect);
+            Assert.Equal(SpellEffectKind.SavingThrowDamage,(await catalog.GetAsync(Ruleset.Current,SpellPackVersions.Current,default))
+                .Single(x=>x.Id=="poison-spray").Effect);
             await services.GetRequiredService<MechanicsService>().DamageAsync(id,new(6));
             sheet=await service.SheetAsync(id);
             var cast=await service.CastPreparedSpellAsync(id,
@@ -366,7 +393,7 @@ public sealed class ProgressionIntegrationTests
             await using var scope=provider.CreateAsyncScope();
             var rules=scope.ServiceProvider.GetRequiredService<RulesDbContext>();
             Assert.Equal(initialHash,(await rules.SpellContent.SingleAsync()).ContentHash);
-            Assert.Equal(5,(await rules.SpellPacks.ToArrayAsync()).Length);
+            Assert.Equal(6,(await rules.SpellPacks.ToArrayAsync()).Length);
             Assert.False(rules.Database.HasPendingModelChanges());
         }
     }

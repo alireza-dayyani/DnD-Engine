@@ -7,7 +7,7 @@ using DndEngine.Domain.Progression;
 namespace DndEngine.Application;
 
 public sealed class MonsterService(ICampaignStore campaigns, ICombatStore combatStore,
-    IMonsterCatalog catalog, IMonsterStore store, CombatService combat,
+    IMonsterCatalog catalog, IMonsterStore store, ICombatCatalog combatCatalog, CombatService combat,
     TimeProvider clock)
 {
     public async Task<MonsterPack> DefinitionsAsync(Guid campaignId,
@@ -43,9 +43,12 @@ public sealed class MonsterService(ICampaignStore campaigns, ICombatStore combat
         var supported = definition.Actions.Where(x=>x.Supported).ToArray();
         var weaponIds = supported.Select(x=>x.WeaponId!).Distinct(StringComparer.Ordinal).ToArray();
         var ammunition = request.Ammunition ?? new Dictionary<string,int>();
+        var weapons=(await combatCatalog.GetAsync(campaign.Ruleset,ct)).Weapons;
         if (ammunition.Keys.Any(x=>!weaponIds.Contains(x,StringComparer.Ordinal)) ||
-            ammunition.Values.Any(x=>x is < 0 or > 100_000))
-            throw new RuleViolation("Ammunition must name a supported monster weapon and be nonnegative.");
+            ammunition.Values.Any(x=>x is < 0 or > 100_000) ||
+            ammunition.Any(x=>x.Value!=0 && !weapons.Single(w=>w.Id==x.Key)
+                .Has(WeaponProperty.Ammunition)))
+            throw new RuleViolation("Ammunition must be nonnegative and belong to a supported ammunition weapon.");
         var id = Guid.NewGuid();
         var uses=definition.Spells.Where(x=>x.LimitedUseGroup is not null)
             .GroupBy(x=>x.LimitedUseGroup!).ToDictionary(x=>x.Key,x=>x.Max(y=>y.UsesPerDay));

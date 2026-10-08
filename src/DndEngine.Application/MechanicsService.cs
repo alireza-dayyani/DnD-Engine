@@ -5,7 +5,8 @@ using DndEngine.Domain.Progression;
 namespace DndEngine.Application;
 
 public sealed class MechanicsService(ICampaignStore store, IRulesCatalog catalog, IDiceRoller dice, TimeProvider clock,
-    IProgressionStore? progressions = null, ICharacterRulesCatalog? characterRules = null)
+    IProgressionStore? progressions = null, ICharacterRulesCatalog? characterRules = null,
+    ICombatStore? combatStore = null)
 {
     public Task<CheckResult> AbilityCheckAsync(Guid id, CheckRequest request, CancellationToken ct = default) =>
         CheckAsync(id, CheckKind.Ability, request.Ability, request.Options, null, ct);
@@ -66,6 +67,8 @@ public sealed class MechanicsService(ICampaignStore store, IRulesCatalog catalog
     private async Task<(Character, Campaign)> LoadAsync(Guid id, CancellationToken ct)
     {
         var character = await store.GetCharacterAsync(id, ct) ?? throw new NotFoundException("Character not found.");
+        if (combatStore is not null && await combatStore.IsEnrolledAsync(id,ct))
+            throw new StateConflictException("Use encounter commands while the character is enrolled in combat.");
         var campaign = await store.GetCampaignAsync(character.CampaignId, ct) ?? throw new NotFoundException("Campaign not found.");
         campaign.Ruleset.RequireSupported();
         await catalog.RequireRulesetAsync(campaign.Ruleset, ct);

@@ -101,7 +101,8 @@ public sealed class InventoryService(ICampaignStore campaigns,IInventoryStore in
         var target=await LoadMutable(request.TargetId,request.ExpectedTargetRevision,ct);
         if (source.Character.CampaignId!=target.Character.CampaignId)
             throw new RuleViolation("Transfer owners must be in the same campaign.");
-        var (sourceItems,item)=Take(source.Inventory.Items,request.ItemId,request.Quantity);
+        var (sourceItems,item)=Take(source.Inventory.Items,request.ItemId,request.Quantity,
+            eventType=="LootAwarded" && source.Character.Health.State.Dead);
         Definition(target,item.DefinitionId);
         if (target.Progression is null && Definition(target,item.DefinitionId).Kind!=ItemKind.Gear)
             throw new RuleViolation("Monster equipment cannot be reassigned without a supported combat projection.");
@@ -179,10 +180,13 @@ public sealed class InventoryService(ICampaignStore campaigns,IInventoryStore in
         var campaign=await campaigns.GetCampaignAsync(character.CampaignId,ct)
             ?? throw new NotFoundException("Campaign not found.");
         var progression=await progressions.GetAsync(id,ct);
-        var inventory=await inventories.GetAsync(id,ct) ?? new(progression?.Inventory ?? [],progression?.CurrencyCopper ?? 0);
+        var profile=await combatStore.GetProfileAsync(id,ct);
+        var inventory=await inventories.GetAsync(id,ct) ?? new(
+            progression?.Inventory ?? profile?.State.Weapons.Select(x=>
+                new InventoryItem(x.Id,x.DefinitionId)).ToArray() ?? [],
+            progression?.CurrencyCopper ?? 0);
         inventory.Validate();
-        return new(character,campaign,inventory,progression,
-            await combatStore.GetProfileAsync(id,ct),
+        return new(character,campaign,inventory,progression,profile,
             await characterCatalog.GetAsync(campaign.Ruleset,ct),
             await combatCatalog.GetAsync(campaign.Ruleset,ct),
             await itemCatalog.GetAsync(campaign.Ruleset,"1",ct));
@@ -219,11 +223,12 @@ public sealed class InventoryService(ICampaignStore campaigns,IInventoryStore in
         if (quantity>100) throw new RuleViolation("Nonstackable acquisition is limited to 100 items per command.");
         return [..items,..Enumerable.Range(0,quantity).Select(_=>new InventoryItem(Guid.NewGuid(),definitionId))];
     }
-    private static (InventoryItem[] Items,InventoryItem Item) Take(InventoryItem[] items,Guid id,int quantity)
+    private static (InventoryItem[] Items,InventoryItem Item) Take(InventoryItem[] items,Guid id,int quantity,
+        bool allowEquipped=false)
     {
         Guard.Range(quantity,1,1_000_000,"Quantity");
         var item=items.SingleOrDefault(x=>x.Id==id) ?? throw new RuleViolation("Item is not owned.");
-        if (item.Equipped || quantity>item.Quantity)
+        if (item.Equipped && !allowEquipped || quantity>item.Quantity)
             throw new RuleViolation("Unequip the item and supply an owned quantity before moving it.");
         return (items.Where(x=>x.Id!=id).Append(item with { Quantity=item.Quantity-quantity })
             .Where(x=>x.Quantity>0).ToArray(),item);

@@ -176,4 +176,38 @@ public sealed class InventoryEncounterIntegrationTests
                 .EventsAsync(campaignId)).Count(x=>x.Type=="LootAwarded"));
         }
     }
+
+    [Fact]
+    public async Task DefeatedAcolytesEquippedArmorCanBeClaimedAsLoot()
+    {
+        var path=Path.Combine(Path.GetTempPath(),"DndEngine.ArmorLootTests",Guid.NewGuid().ToString("N"));
+        await using var provider=Provider(path,18,10,16,6,6);
+        await provider.InitializeDndEngineAsync();
+        await using var scope=provider.CreateAsyncScope(); var services=scope.ServiceProvider;
+        var campaign=(await services.GetRequiredService<CampaignService>().CreateAsync(new("Armor loot"))).Id;
+        var heroId=await Fighter(services,campaign,"Mira");
+        var priestId=(await services.GetRequiredService<MonsterService>()
+            .CreateAsync(new(campaign,"priest-acolyte"))).Instance.Id;
+        var inventory=services.GetRequiredService<InventoryService>();
+        var priestInventory=await inventory.GetAsync(priestId);
+        var armor=priestInventory.Items.Single(x=>x.DefinitionId=="chain-shirt");
+        Assert.True(armor.Equipped);
+        var greatsword=(await inventory.GetAsync(heroId)).Items.Single(x=>x.DefinitionId=="greatsword");
+        var combat=services.GetRequiredService<CombatService>();
+        var encounter=(await combat.CreateAsync(campaign,new("Acolyte duel"))).Id;
+        var hero=(await combat.AddAsync(encounter,new(heroId))).Result.Id;
+        var priest=(await services.GetRequiredService<MonsterService>()
+            .AddToEncounterAsync(encounter,new(priestId))).Result.Id;
+        await combat.InitiativeAsync(encounter); await combat.StartAsync(encounter,new());
+        var hit=await combat.AttackAsync(encounter,new(hero,
+            new(priest,greatsword.Id,AttackMode.Melee,new(5,true,true),Hands:2)));
+        Assert.True(hit.Result.Health!.After.Dead);
+        await combat.CompleteAsync(encounter,new(EncounterOutcome.Victory,hit.Revision));
+        var heroInventory=await inventory.GetAsync(heroId);
+        priestInventory=await inventory.GetAsync(priestId);
+        await services.GetRequiredService<EncounterRewardService>().AwardLootAsync(encounter,
+            new(priestId,heroId,armor.Id,1,priestInventory.Revision,heroInventory.Revision));
+        Assert.DoesNotContain((await inventory.GetAsync(priestId)).Items,x=>x.Id==armor.Id);
+        Assert.Contains((await inventory.GetAsync(heroId)).Items,x=>x.Id==armor.Id && !x.Equipped);
+    }
 }

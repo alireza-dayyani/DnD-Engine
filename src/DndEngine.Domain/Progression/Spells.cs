@@ -12,7 +12,8 @@ public static class SpellPackVersions
     public const string Previous = "3";
     public const string Fourth = "4";
     public const string Fifth = "5";
-    public const string Current = "6";
+    public const string Sixth = "6";
+    public const string Current = "7";
 }
 
 public sealed record SpellDefinition(string Id, string Name, int Level, string[] ClassIds,
@@ -83,7 +84,7 @@ public static class FeatureSpells
 {
     public static PreparedSpell[] AlwaysPrepared(ProgressionState state)
     {
-        if (state.SpellPackVersion is not (SpellPackVersions.Previous or SpellPackVersions.Fourth or SpellPackVersions.Fifth or SpellPackVersions.Current)) return [];
+        if (state.SpellPackVersion is not (SpellPackVersions.Previous or SpellPackVersions.Fourth or SpellPackVersions.Fifth or SpellPackVersions.Sixth or SpellPackVersions.Current)) return [];
         var warlock = state.Classes.SingleOrDefault(x => x.ClassId == "warlock");
         return warlock is { Level: >= 3 } &&
             (state.SubclassIds ?? []).GetValueOrDefault("warlock") == "fiend-patron"
@@ -146,7 +147,7 @@ public static class SpellPreparation
             "wizard" => WizardPrepared,
             _ => null
         };
-        return table is null ? 0 : table[classLevel-1];
+        return table is null || (classLevel == 1 && classId is "paladin" or "ranger") ? 0 : table[classLevel-1];
     }
 
     public static int MaximumSpellLevel(string classId, int classLevel)
@@ -154,7 +155,7 @@ public static class SpellPreparation
         if (classLevel is < 1 or > 20) throw new RuleViolation("Class level must be between 1 and 20.");
         return classId switch
         {
-            "paladin" or "ranger" => Math.Min(5,(classLevel+3)/4),
+            "paladin" or "ranger" => classLevel == 1 ? 0 : Math.Min(5,(classLevel+3)/4),
             "warlock" => Math.Min(5,(classLevel+1)/2),
             "bard" or "cleric" or "druid" or "sorcerer" or "wizard" => Math.Min(9,(classLevel+1)/2),
             _ => 0

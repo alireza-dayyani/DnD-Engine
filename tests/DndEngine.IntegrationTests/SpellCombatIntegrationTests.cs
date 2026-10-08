@@ -518,6 +518,10 @@ public sealed class SpellCombatIntegrationTests
             AreaCenterDistanceFeet:50));
         Assert.True(cast.Result.MysticArcanumSpent);
         Assert.Equal(36,cast.Result.Targets[0].Damage!.AppliedDamage);
+        Assert.DoesNotContain((await progression.SheetAsync(warlock.Id)).Inventory,
+            x=>x.DefinitionId=="black-pearl-powder-500gp");
+        Assert.DoesNotContain((await services.GetRequiredService<InventoryService>().GetAsync(warlock.Id)).Items,
+            x=>x.DefinitionId=="black-pearl-powder-500gp");
         Assert.Equal(3,(await progression.SpellcastingAsync(warlock.Id))!.PactMagicSlots!.Current);
         Assert.Contains(6,(await progression.SheetAsync(warlock.Id)).MysticArcanumSpentLevels!);
         await combat.EndTurnAsync(encounter.Id,new(actor));

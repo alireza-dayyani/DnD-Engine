@@ -109,11 +109,13 @@ public class CombatIntegrationTests
     private static ServiceProvider Provider(string path, IDiceRoller dice) => new ServiceCollection().AddLogging().AddDndEngine(path)
         .AddSingleton(dice).BuildServiceProvider(new ServiceProviderOptions { ValidateScopes = true });
     private sealed record Setup(Guid Campaign, Guid Encounter, Guid Actor, Guid Target, Guid ActorCharacter, Guid TargetCharacter, Guid Weapon);
-    private static async Task<Setup> Prepare(IServiceProvider services)
+    private static async Task<Setup> Prepare(IServiceProvider services, int targetHp = 30)
     {
         var campaign = await services.GetRequiredService<CampaignService>().CreateAsync(new("Conflict test"));
         var characters = services.GetRequiredService<CharacterService>(); var combat = services.GetRequiredService<CombatService>();
         var a = await characters.CreateAsync(Sheet(campaign.Id, "Archer", 30)); var b = await characters.CreateAsync(Sheet(campaign.Id, "Target", 30));
+        if (targetHp < 30)
+            await services.GetRequiredService<MechanicsService>().DamageAsync(b.Id,new(30-targetHp));
         await combat.ImportAsync(a.Id, Capabilities("shortbow")); await combat.ImportAsync(b.Id, Capabilities());
         var weapon = await combat.GrantWeaponAsync(a.Id, new("shortbow", 10));
         var e = await combat.CreateAsync(campaign.Id, new("Ambush"));
@@ -136,7 +138,16 @@ public class CombatIntegrationTests
         await using var provider = Provider(DirectoryPath(), dice); await provider.InitializeDndEngineAsync();
         await using var scope = provider.CreateAsyncScope(); var services = scope.ServiceProvider; var f = await Prepare(services);
         await using var other = provider.CreateAsyncScope();
-        dice.BeforeRoll = () => other.ServiceProvider.GetRequiredService<MechanicsService>().DamageAsync(f.TargetCharacter, new(1)).GetAwaiter().GetResult();
+        dice.BeforeRoll = () =>
+        {
+            var store=other.ServiceProvider.GetRequiredService<ICampaignStore>();
+            var character=store.GetCharacterAsync(f.TargetCharacter,default).GetAwaiter().GetResult()!;
+            var change=character.Health.Damage(1);
+            store.SaveCharacterAsync(character,new(0,Guid.NewGuid(),f.Campaign,character.Id,
+                "ConcurrentFixtureDamage",DateTimeOffset.UtcNow,Ruleset.Current,
+                2,character.Revision+1,
+                JsonSerializer.SerializeToElement(change)),default).GetAwaiter().GetResult();
+        };
         await Assert.ThrowsAsync<StateConflictException>(() => services.GetRequiredService<CombatService>().AttackAsync(f.Encounter, new(f.Actor, BowAttack(f))));
         Assert.Equal(4, dice.Count); // two initiative rolls, exactly one attack roll and one damage roll
         var state = await services.GetRequiredService<CombatService>().GetAsync(f.Encounter);
@@ -194,15 +205,15 @@ public class CombatIntegrationTests
     [Fact]
     public async Task AutomaticDeathSavesConditionExpiryAndGrappleReleasePersist()
     {
-        await using var provider = Provider(DirectoryPath(), new FixedDiceRoller(15, 5, 20)); await provider.InitializeDndEngineAsync();
-        await using var scope = provider.CreateAsyncScope(); var services = scope.ServiceProvider; var f = await Prepare(services);
+        await using var provider = Provider(DirectoryPath(), new FixedDiceRoller(15, 5, 15, 5, 5, 20)); await provider.InitializeDndEngineAsync();
+        await using var scope = provider.CreateAsyncScope(); var services = scope.ServiceProvider; var f = await Prepare(services,1);
         var combat = services.GetRequiredService<CombatService>();
         await combat.ApplyConditionAsync(f.Encounter, new(f.Actor, ConditionKind.Grappled, "grapple", f.TargetCharacter));
         await combat.ApplyConditionAsync(f.Encounter, new(f.Target, ConditionKind.Stunned, "stun", Expiry: ExpiryBoundary.TurnStart, ExpiresOnTurn: 2));
         Assert.Empty((await combat.GetAsync(f.Encounter)).Profiles.Single(x => x.CharacterId == f.ActorCharacter).Conditions);
         var save = await combat.SavingThrowAsync(f.Encounter, new(f.Target, new(Ability.Strength, 1)));
         Assert.True(save.Result.AutomaticFailure); Assert.Null(save.Result.Roll);
-        await services.GetRequiredService<MechanicsService>().DamageAsync(f.TargetCharacter, new(30));
+        await combat.AttackAsync(f.Encounter,new(f.Actor,BowAttack(f)));
         await combat.EndTurnAsync(f.Encounter, new(f.Actor));
         var view = await combat.GetAsync(f.Encounter);
         Assert.Empty(view.Profiles.Single(x => x.CharacterId == f.TargetCharacter).Conditions);

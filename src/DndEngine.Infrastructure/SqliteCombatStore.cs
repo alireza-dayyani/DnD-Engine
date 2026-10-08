@@ -50,11 +50,20 @@ public sealed class SqliteCombatStore(CampaignDbContext db) : ICombatStore,IEnco
         return row is null ? null : new(JsonSerializer.Deserialize<EncounterState>(row.StateJson, CombatCatalog.Json)! with { Revision = row.Revision });
     }
     public Task<bool> IsEnrolledAsync(Guid characterId, CancellationToken ct) => db.CombatMemberships.AsNoTracking().AnyAsync(x => x.CharacterId == characterId, ct);
-    public async Task SaveProfileAsync(Character character, CombatProfile profile, CampaignEvent entry, CancellationToken ct)
+    public async Task SaveProfileAsync(Character character, CombatProfile profile, CampaignEvent entry, CancellationToken ct,
+        InventoryState? inventory = null)
     {
         try
         {
             UpdateCharacter(character); await UpsertProfile(profile, ct); db.Events.Add(SqliteCampaignStore.ToRow(entry));
+            if (inventory is not null)
+            {
+                inventory.Validate();
+                var row=await db.InventoryStates.SingleOrDefaultAsync(x=>x.OwnerId==character.Id,ct);
+                if (row is null) { row=new() { OwnerId=character.Id }; db.InventoryStates.Add(row); }
+                row.ItemsJson=JsonSerializer.Serialize(inventory.Items,CombatCatalog.Json);
+                row.CopperPieces=inventory.CopperPieces;
+            }
             await Commit(ct);
         }
         finally { db.ChangeTracker.Clear(); }

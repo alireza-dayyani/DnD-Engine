@@ -50,7 +50,8 @@ public static class SpellSlotCalculator
                 CantripKnowledge.Capacity(x.ClassId,x.Level));
         }).ToArray();
         var slotClasses = casters.Where(x => x.ClassId != "warlock").ToArray();
-        var casterLevel = slotClasses.Sum(x => x.ClassId is "paladin" or "ranger" ? (x.Level+1)/2 : x.Level);
+        var casterLevel = slotClasses.Sum(x => x.ClassId is "paladin" or "ranger"
+            ? x.Level >= 2 ? (x.Level+1)/2 : 0 : x.Level);
         var maxima = casterLevel == 0 ? new int[9] : FullCasterSlots[Math.Clamp(casterLevel,0,20)];
         if (spent.Where((value,index) => value < 0 || value > maxima[index]).Any())
             throw new RuleViolation("Shared spell slot expenditure exceeds available slots.");

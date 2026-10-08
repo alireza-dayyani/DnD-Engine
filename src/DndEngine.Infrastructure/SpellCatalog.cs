@@ -104,7 +104,11 @@ public sealed class SpellCatalog(RulesDbContext db) : ISpellCatalog
                 ["bard","sorcerer","warlock","wizard"],"Action or Ritual","Self","V,S,M",
                 SpellEffectKind.LanguageComprehension,"SRD 5.2.1 p. 117",Ritual:true)
         ];
-        await ImportPackAsync(db,SpellPackVersions.Current,sixth,ct);
+        await ImportPackAsync(db,SpellPackVersions.Sixth,sixth,ct);
+        SpellDefinition[] seventh = [..sixth.Select(x => x.Id == "poison-spray"
+            ? x with { Effect=SpellEffectKind.SavingThrowDamage,
+                Damage=new(DamageType.Poison,1,12,Ability.Constitution) } : x)];
+        await ImportPackAsync(db,SpellPackVersions.Current,seventh,ct);
     }
 
     private static async Task ImportPackAsync(RulesDbContext db,string version,SpellDefinition[] spells,CancellationToken ct)

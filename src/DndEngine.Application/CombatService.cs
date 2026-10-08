@@ -30,6 +30,8 @@ public sealed class CombatService(ICampaignStore campaigns, ICombatStore store, 
     public async Task<CombatProfileState> ImportAsync(Guid characterId, CombatCapabilities capabilities, CancellationToken ct = default)
     {
         var character = await Character(characterId, ct); var campaign = await Campaign(character.CampaignId, ct);
+        if (monsterStore is not null && await monsterStore.GetAsync(characterId,ct) is not null)
+            throw new RuleViolation("Pinned monster combat capabilities cannot be manually replaced.");
         if (progressions is not null && await progressions.GetAsync(characterId,ct) is not null)
             throw new RuleViolation("Choice-based characters derive combat capabilities from progression; manual import is unavailable.");
         capabilities.Validate(); var content = await catalog.GetAsync(campaign.Ruleset, ct);
@@ -43,6 +45,8 @@ public sealed class CombatService(ICampaignStore campaigns, ICombatStore store, 
     public async Task<OwnedWeapon> GrantWeaponAsync(Guid characterId, GrantWeapon request, CancellationToken ct = default)
     {
         var character = await Character(characterId, ct); var campaign = await Campaign(character.CampaignId, ct);
+        if (monsterStore is not null && await monsterStore.GetAsync(characterId,ct) is not null)
+            throw new RuleViolation("Pinned monster attacks and weapons cannot be manually granted.");
         if (progressions is not null && await progressions.GetAsync(characterId,ct) is not null)
             throw new RuleViolation("Use the character inventory endpoint for choice-based characters.");
         var profile = await Profile(characterId, ct);
@@ -52,8 +56,14 @@ public sealed class CombatService(ICampaignStore campaigns, ICombatStore store, 
         Guard.Range(request.Ammunition, 0, 100000, "Ammunition");
         if (!weapon.Has(WeaponProperty.Ammunition) && request.Ammunition != 0) throw new RuleViolation("Weapon does not use ammunition.");
         var instance = new OwnedWeapon(Guid.NewGuid(), weapon.Id, request.Ammunition);
+        var inventory=inventoryStore is null ? null :
+            await inventoryStore.GetAsync(characterId,ct) ?? new InventoryState(
+                profile.State.Weapons.Select(x=>new InventoryItem(x.Id,x.DefinitionId)).ToArray(),0);
         profile.GrantWeapon(instance);
-        await store.SaveProfileAsync(character, profile, Event(campaign, "WeaponGranted", instance, character), ct); return instance;
+        if (inventory is not null) inventory=inventory with {
+            Items=[..inventory.Items,new InventoryItem(instance.Id,instance.DefinitionId)] };
+        await store.SaveProfileAsync(character, profile, Event(campaign, "WeaponGranted", instance, character), ct,
+            inventory); return instance;
     }
     public async Task<ActiveCondition> RemoveOutsideCombatAsync(Guid characterId, Guid conditionId, CancellationToken ct = default)
     {
@@ -191,7 +201,9 @@ public sealed class CombatService(ICampaignStore campaigns, ICombatStore store, 
             spell.Components.Contains('S') && !request.SomaticAvailable) ||
             spell.Components.Contains('M') && (spell.MaterialCostGp > 0 || !subtle) && !request.MaterialAvailable)
             throw new RuleViolation("Required spell components are unavailable.");
-        if (spell.MaterialItemId is { } materialId && !state.Inventory.Any(x => x.DefinitionId == materialId))
+        var pricedComponent=spell.MaterialItemId ??
+            (spell.Id=="circle-of-death" ? "black-pearl-powder-500gp" : null);
+        if (pricedComponent is { } materialId && !state.Inventory.Any(x => x.DefinitionId == materialId && x.Quantity > 0))
             throw new RuleViolation("The priced spell component is not in the caster's inventory.");
         if (profile.State.Capabilities.UntrainedArmorPenalty)
             throw new RuleViolation("Untrained armor prevents spellcasting.");
@@ -252,7 +264,20 @@ public sealed class CombatService(ICampaignStore campaigns, ICombatStore store, 
         }
         foreach (var target in targets.Where(x => x.Damage is { AppliedDamage: > 0 }))
             CheckConcentration(s,target.CombatantId,target.Damage!.AppliedDamage);
-        if (usage is not null || request.Metamagic is not null || arcanumKnown)
+        if (spell.Id == "circle-of-death" && pricedComponent is { } consumedId)
+        {
+            if (inventoryStore is null) throw new RuleViolation("Spell component inventory is unavailable.");
+            var inventory=await inventoryStore.GetAsync(caster.Id,ct)
+                ?? throw new RuleViolation("Spell component inventory is unavailable.");
+            var component=inventory.Items.FirstOrDefault(x=>x.DefinitionId==consumedId && x.Quantity>0)
+                ?? throw new RuleViolation("The priced spell component is not in the caster's inventory.");
+            var remaining=inventory.Items.Where(x=>x.Id!=component.Id).ToList();
+            if (component.Quantity>1) remaining.Add(component with { Quantity=component.Quantity-1 });
+            var items=remaining.ToArray();
+            s.InventoryUpdates[caster.Id]=inventory with { Items=items };
+            castState=castState with { Inventory=items };
+        }
+        if (usage is not null || request.Metamagic is not null || arcanumKnown || spell.Id == "circle-of-death")
             s.ProgressionUpdates.Add(caster.Id,castState with { SpellSlots=usage ?? state.SpellSlots });
         ReactionSpellResolution? reactionResult = null;
         if (reaction is not null && targets[0].Damage is { AppliedDamage: > 0 } &&
@@ -374,8 +399,8 @@ public sealed class CombatService(ICampaignStore campaigns, ICombatStore store, 
         foreach (var member in s.Encounter.State.Combatants.Where(x=>x.Kind==CombatantKind.Monster))
         {
             if (!s.Characters[member.CharacterId].Health.State.Dead) continue;
-            var instance=await monsterStore.GetAsync(member.CharacterId,ct)
-                ?? throw new RuleViolation("Monster combatant has no pinned instance.");
+            var instance=await monsterStore.GetAsync(member.CharacterId,ct);
+            if (instance is null) continue;
             var pack=await monsterCatalog.GetAsync(s.Campaign.Ruleset,instance.PackVersion,ct);
             available=checked(available+pack.Monsters.Single(x=>x.Id==instance.DefinitionId).ExperiencePoints);
             defeated.Add(instance.Id);

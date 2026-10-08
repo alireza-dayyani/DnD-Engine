@@ -47,7 +47,7 @@ Phase 5 uses the same combat and spell resolvers for Goblin Minion, Skeleton and
 | GET / POST | `/character-choices`, `/srd-characters` | Read choices/create choice-based SRD character |
 | GET / POST | `/characters/{id}/sheet`, `/characters/{id}/level-up` | Derived sheet and progression |
 | GET | `/characters/{id}/spellcasting` | Casting abilities and current/maximum slot balances |
-| GET | `/spells` | Read an immutable spell pack (current pack 6 by default) |
+| GET | `/spells` | Read an immutable spell pack (current pack 7 by default) |
 | POST | `/characters/{id}/spell-slots/spend` | Record one shared or Pact Magic slot expenditure |
 | POST | `/characters/{id}/spells/cast-self` | Cast a prepared self-healing spell on the caster outside combat |
 | POST | `/characters/{id}/spells/comprehend-languages/cast`, `/check` | Cast and check a timed language-comprehension effect |

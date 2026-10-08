@@ -14,7 +14,8 @@ public interface ICombatStore
     Task<CombatProfile?> GetProfileAsync(Guid characterId, CancellationToken ct);
     Task<CombatEncounter?> GetEncounterAsync(Guid id, CancellationToken ct);
     Task<bool> IsEnrolledAsync(Guid characterId, CancellationToken ct);
-    Task SaveProfileAsync(Character character, CombatProfile profile, CampaignEvent entry, CancellationToken ct);
+    Task SaveProfileAsync(Character character, CombatProfile profile, CampaignEvent entry, CancellationToken ct,
+        DndEngine.Domain.Inventory.InventoryState? inventory = null);
     Task SaveEncounterAsync(CombatEncounter encounter, IReadOnlyList<Character> characters,
         IReadOnlyList<CombatProfile> profiles, IReadOnlyList<CampaignEvent> events, bool create, CancellationToken ct,
         IReadOnlyDictionary<Guid, ProgressionState>? progressionUpdates = null,
