@@ -12,6 +12,7 @@ builder.Services.ConfigureHttpJsonOptions(o => {
 builder.Services.AddProblemDetails();
 builder.Services.AddDndEngine(builder.Configuration["DataDirectory"] ?? DefaultDataDirectory());
 var app = builder.Build();
+app.UseRouting();
 app.Use(async (context, next) =>
 {
     try { await next(context); }
@@ -21,6 +22,7 @@ app.Use(async (context, next) =>
         await Results.Problem(statusCode: status, title: ex.Message).ExecuteAsync(context);
     }
 });
+app.UseMiddleware<IdempotencyMiddleware>();
 app.MapGet("/health", () => Results.Ok(new { status = "ready", ruleset = Ruleset.Current }));
 app.MapPost("/campaigns", async (CreateCampaign request, CampaignService service, CancellationToken ct) => {
     var result = await service.CreateAsync(request, ct); return Results.Created($"/campaigns/{result.Id}", result);
@@ -41,6 +43,9 @@ app.MapPost("/characters/{id:guid}/heal", (Guid id, HealingRequest request, Mech
 app.MapPost("/characters/{id:guid}/temporary-hp", (Guid id, TemporaryHpRequest request, MechanicsService service, CancellationToken ct) => service.TemporaryHpAsync(id, request, ct));
 app.MapPost("/characters/{id:guid}/death-saving-throws", (Guid id, MechanicsService service, CancellationToken ct) => service.DeathSaveAsync(id, ct));
 app.MapCombat();
+app.MapMonsters();
+app.MapInventory();
+app.MapEncounterRewards();
 app.MapProgression();
 await app.Services.InitializeDndEngineAsync();
 await app.RunAsync();

@@ -198,6 +198,15 @@ public sealed class CombatEncounter
         return resources;
     }
 
+    public TurnResources UseBonusItem(Guid actor,ConditionEffects effects)
+    {
+        var member=RequireTurn(actor); effects.RequireAction();
+        if (member.Resources.BonusActionUsed)
+            throw new RuleViolation("Bonus action has already been used.");
+        var next=member.Resources with { BonusActionUsed=true };
+        SetResources(actor,next); return next;
+    }
+
     public TurnResources UseReactionMagic(Guid actor, ConditionEffects effects)
     {
         RequireActive();

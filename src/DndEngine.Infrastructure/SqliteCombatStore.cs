@@ -3,6 +3,8 @@ using DndEngine.Application;
 using DndEngine.Domain;
 using DndEngine.Domain.Combat;
 using DndEngine.Domain.Progression;
+using DndEngine.Domain.Monsters;
+using DndEngine.Domain.Inventory;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 
@@ -26,7 +28,16 @@ public sealed class CombatMembershipRow
     public Guid CharacterId { get; set; }
     public Guid EncounterId { get; set; }
 }
-public sealed class SqliteCombatStore(CampaignDbContext db) : ICombatStore
+public sealed class EncounterRewardRow
+{
+    public Guid EncounterId { get; set; }
+    public string Outcome { get; set; } = "";
+    public int AvailableExperience { get; set; }
+    public string AwardsJson { get; set; } = "";
+    public string DefeatedMonsterIdsJson { get; set; } = "";
+    public long Revision { get; set; }
+}
+public sealed class SqliteCombatStore(CampaignDbContext db) : ICombatStore,IEncounterRewardStore
 {
     public async Task<CombatProfile?> GetProfileAsync(Guid characterId, CancellationToken ct)
     {
@@ -51,7 +62,10 @@ public sealed class SqliteCombatStore(CampaignDbContext db) : ICombatStore
     public async Task SaveEncounterAsync(CombatEncounter encounter, IReadOnlyList<Character> characters,
         IReadOnlyList<CombatProfile> profiles, IReadOnlyList<CampaignEvent> events, bool create, CancellationToken ct,
         IReadOnlyDictionary<Guid, ProgressionState>? progressionUpdates = null,
-        Campaign? clockBefore = null, Campaign? clockAfter = null)
+        Campaign? clockBefore = null, Campaign? clockAfter = null,
+        IReadOnlyDictionary<Guid,MonsterInstance>? monsterUpdates = null,
+        EncounterRewardState? rewardState = null,
+        IReadOnlyDictionary<Guid,InventoryState>? inventoryUpdates = null)
     {
         try
         {
@@ -75,6 +89,35 @@ public sealed class SqliteCombatStore(CampaignDbContext db) : ICombatStore
             {
                 var progressionRow = await db.Progressions.SingleAsync(x => x.CharacterId == characterId,ct);
                 progressionRow.StateJson = JsonSerializer.Serialize(progression,CombatCatalog.Json);
+            }
+            if (monsterUpdates is not null) foreach (var (monsterId,monster) in monsterUpdates)
+            {
+                if (monsterId != monster.Id || monster.CampaignId != state.CampaignId)
+                    throw new RuleViolation("Invalid monster update identity.");
+                var monsterRow = await db.MonsterInstances.SingleAsync(x=>x.Id==monsterId,ct);
+                monsterRow.LimitedUsesJson=JsonSerializer.Serialize(monster.LimitedUsesRemaining ?? [],CombatCatalog.Json);
+                monsterRow.Revision=checked(monster.Revision+1);
+                db.Entry(monsterRow).Property(x=>x.Revision).OriginalValue=monster.Revision;
+            }
+            if (inventoryUpdates is not null) foreach (var (ownerId,inventory) in inventoryUpdates)
+            {
+                inventory.Validate();
+                if (!state.Combatants.Any(x=>x.CharacterId==ownerId))
+                    throw new RuleViolation("Inventory owner is not in this encounter.");
+                var inventoryRow=await db.InventoryStates.SingleAsync(x=>x.OwnerId==ownerId,ct);
+                inventoryRow.ItemsJson=JsonSerializer.Serialize(inventory.Items,CombatCatalog.Json);
+                inventoryRow.CopperPieces=inventory.CopperPieces;
+            }
+            if (rewardState is not null)
+            {
+                if (state.Status!=EncounterStatus.Completed || rewardState.EncounterId!=state.Id)
+                    throw new RuleViolation("Rewards require a completed encounter.");
+                db.EncounterRewards.Add(new() { EncounterId=state.Id,
+                    Outcome=rewardState.Outcome.ToString(),
+                    AvailableExperience=rewardState.AvailableExperience,
+                    AwardsJson=JsonSerializer.Serialize(rewardState.Awards,CombatCatalog.Json),
+                    DefeatedMonsterIdsJson=JsonSerializer.Serialize(rewardState.DefeatedMonsterIds,CombatCatalog.Json),
+                    Revision=0 });
             }
             if (clockBefore is not null)
             {
@@ -111,5 +154,34 @@ public sealed class SqliteCombatStore(CampaignDbContext db) : ICombatStore
         catch (DbUpdateConcurrencyException) { throw new StateConflictException("Combat or character changed concurrently. Reload before trying again."); }
         catch (DbUpdateException ex) when (ex.InnerException is SqliteException { SqliteErrorCode: 19 })
         { throw new StateConflictException("Combat write conflicted with existing state. Reload before trying again."); }
+    }
+
+    public async Task<EncounterRewardState?> GetAsync(Guid encounterId,CancellationToken ct)
+    {
+        var row=await db.EncounterRewards.AsNoTracking().SingleOrDefaultAsync(x=>x.EncounterId==encounterId,ct);
+        return row is null ? null : new(row.EncounterId,Enum.Parse<EncounterOutcome>(row.Outcome),
+            row.AvailableExperience,JsonSerializer.Deserialize<ExperienceAward[]>(row.AwardsJson,CombatCatalog.Json)!,
+            JsonSerializer.Deserialize<Guid[]>(row.DefeatedMonsterIdsJson,CombatCatalog.Json)!,row.Revision);
+    }
+    public async Task AwardExperienceAsync(EncounterRewardState before,EncounterRewardState after,
+        CampaignEvent entry,CancellationToken ct)
+    {
+        if (before.EncounterId!=after.EncounterId || after.Revision!=before.Revision+1 ||
+            before.AvailableExperience!=after.AvailableExperience || before.Outcome!=after.Outcome ||
+            !before.DefeatedMonsterIds.SequenceEqual(after.DefeatedMonsterIds))
+            throw new RuleViolation("Invalid reward transition.");
+        try
+        {
+            var row=new EncounterRewardRow { EncounterId=before.EncounterId,
+                Outcome=before.Outcome.ToString(),AvailableExperience=before.AvailableExperience,
+                AwardsJson=JsonSerializer.Serialize(after.Awards,CombatCatalog.Json),
+                DefeatedMonsterIdsJson=JsonSerializer.Serialize(before.DefeatedMonsterIds,CombatCatalog.Json),
+                Revision=after.Revision };
+            db.Attach(row); db.Entry(row).State=EntityState.Modified;
+            db.Entry(row).Property(x=>x.Revision).OriginalValue=before.Revision;
+            db.Events.Add(SqliteCampaignStore.ToRow(entry));
+            await Commit(ct);
+        }
+        finally { db.ChangeTracker.Clear(); }
     }
 }

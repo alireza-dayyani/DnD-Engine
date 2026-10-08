@@ -1,15 +1,22 @@
 using DndEngine.Domain;
 using DndEngine.Domain.Combat;
 using DndEngine.Domain.Progression;
+using DndEngine.Domain.Monsters;
+using DndEngine.Domain.Inventory;
 
 namespace DndEngine.Application;
 
 public sealed class CombatService(ICampaignStore campaigns, ICombatStore store, ICombatCatalog catalog, IDiceRoller dice, TimeProvider clock,
-    IProgressionStore? progressions = null, ISpellCatalog? spellCatalog = null)
+    IProgressionStore? progressions = null, ISpellCatalog? spellCatalog = null,
+    IMonsterStore? monsterStore = null, IMonsterCatalog? monsterCatalog = null,
+    IInventoryStore? inventoryStore = null,
+    IEncounterItemCatalog? itemCatalog = null)
 {
     private sealed record Session(CombatEncounter Encounter, Campaign Campaign, CombatContent Content,
         Dictionary<Guid, Character> Characters, Dictionary<Guid, CombatProfile> Profiles, List<CampaignEvent> Events,
-        Dictionary<Guid, ProgressionState> ProgressionUpdates, int OriginalRound);
+        Dictionary<Guid, ProgressionState> ProgressionUpdates, int OriginalRound,
+        HashSet<Guid> OriginallyDeadIds, Dictionary<Guid,MonsterInstance> MonsterUpdates,
+        Dictionary<Guid,InventoryState> InventoryUpdates);
     private sealed record ReactionCast(ProgressionState State, SpellDefinition Spell,
         ClassSpellcasting Casting, HellishRebukeReaction Declaration);
 
@@ -70,6 +77,9 @@ public sealed class CombatService(ICampaignStore campaigns, ICombatStore store, 
     {
         var s = await Load(id, ct); var character = await Character(request.CharacterId, ct);
         if (character.CampaignId != s.Campaign.Id) throw new RuleViolation("Combatant belongs to another campaign.");
+        if (monsterStore is not null && await monsterStore.GetAsync(character.Id,ct) is not null &&
+            (request.Kind!=CombatantKind.Monster || request.ZeroHpPolicy!=ZeroHpPolicy.Die))
+            throw new RuleViolation("A pinned monster must enter combat as a Monster with the Die zero-HP policy.");
         if (await store.IsEnrolledAsync(character.Id, ct)) throw new RuleViolation("Character is already enrolled in an unfinished encounter.");
         character.Health.RequireAlive(); var profile = await Profile(character.Id, ct);
         var member = s.Encounter.Add(character.Id, request.Kind, request.ZeroHpPolicy, request.Surprised, request.InitiativeGroup);
@@ -109,6 +119,40 @@ public sealed class CombatService(ICampaignStore campaigns, ICombatStore store, 
                 context.AttackerCanSeeTarget,reaction) };
         ReleaseGrapples(s);
         return await Save(s,"AttackMade",result,ct,actor.Id);
+    }
+    public async Task<CombatCommandResult<CombatItemUseResult>> UseItemAsync(Guid id,
+        UseCombatItem request,CancellationToken ct=default)
+    {
+        if (inventoryStore is null || itemCatalog is null)
+            throw new RuleViolation("Combat inventory is unavailable.");
+        var s=await Load(id,ct);
+        if (s.Encounter.State.Revision!=request.ExpectedRevision)
+            throw new StateConflictException("Encounter revision changed. Reload before using an item.");
+        if (request.DistanceFeet is < 0 or > 5)
+            throw new RuleViolation("Potion target must be within 5 feet.");
+        var actor=s.Encounter.RequireTurn(request.CombatantId);
+        var target=s.Encounter.Combatant(request.TargetCombatantId);
+        var items=await inventoryStore.GetAsync(actor.CharacterId,ct)
+            ?? throw new RuleViolation("Combatant has no inventory state.");
+        var item=items.Items.SingleOrDefault(x=>x.Id==request.ItemId)
+            ?? throw new RuleViolation("Item is not owned by the acting combatant.");
+        var definition=(await itemCatalog.GetAsync(s.Campaign.Ruleset,"1",ct)).Items
+            .SingleOrDefault(x=>x.Id==item.DefinitionId);
+        if (definition?.Consumable!=true || definition.EffectId!="heal-2d4-plus-2" ||
+            item.Quantity<1)
+            throw new RuleViolation("Item has no supported combat consumable effect.");
+        s.Characters[target.CharacterId].Health.RequireAlive();
+        var resources=s.Encounter.UseBonusItem(actor.Id,Effects(s,actor.Id));
+        var rolls=dice.Roll(new(2,4)).Rolls.ToArray();
+        var healing=s.Characters[target.CharacterId].Health.Heal(rolls.Sum()+2);
+        var remaining=items.Items.Where(x=>x.Id!=item.Id).ToList();
+        if (item.Quantity>1) remaining.Add(item with { Quantity=item.Quantity-1 });
+        var inventory=items with { Items=remaining.ToArray() };
+        s.InventoryUpdates[actor.CharacterId]=inventory;
+        if (progressions is not null && await progressions.GetAsync(actor.CharacterId,ct) is { } progression)
+            s.ProgressionUpdates[actor.CharacterId]=progression with { Inventory=inventory.Items };
+        return await Save(s,"ItemConsumed",new CombatItemUseResult(item.Id,item.DefinitionId,target.Id,rolls,
+            healing.HitPointsRegained,resources),ct,actor.Id);
     }
     public async Task<CombatCommandResult<CombatSpellResolution>> CastSpellAsync(Guid id, CastCombatSpell request, CancellationToken ct = default)
     {
@@ -225,6 +269,49 @@ public sealed class CombatService(ICampaignStore campaigns, ICombatStore store, 
             arcanumKnown,appliedPenalties,reactionResult),ct,actor.Id);
     }
 
+    public async Task<CombatCommandResult<CombatSpellResolution>> CastMonsterSpellAsync(Guid id,
+        CastMonsterSpell request, CancellationToken ct = default)
+    {
+        if (monsterStore is null || monsterCatalog is null || spellCatalog is null)
+            throw new RuleViolation("Monster spellcasting is not installed.");
+        var s=await Load(id,ct);
+        if (s.Encounter.State.Revision!=request.ExpectedRevision)
+            throw new StateConflictException("Encounter revision changed. Reload before casting.");
+        var actor=s.Encounter.RequireTurn(request.CombatantId);
+        var monster=await monsterStore.GetAsync(actor.CharacterId,ct)
+            ?? throw new RuleViolation("Caster is not a catalog monster.");
+        var definition=(await monsterCatalog.GetAsync(s.Campaign.Ruleset,monster.PackVersion,ct))
+            .Monsters.Single(x=>x.Id==monster.DefinitionId);
+        var known=definition.Spells.SingleOrDefault(x=>x.SpellId==request.SpellId)
+            ?? throw new RuleViolation("Monster does not have this spell.");
+        if (!known.Supported)
+            throw new RuleViolation(known.DeferredReason ?? "Monster spell effect is not supported.");
+        var spell=(await spellCatalog.GetAsync(s.Campaign.Ruleset,monster.SpellPackVersion,ct))
+            .SingleOrDefault(x=>x.Id==known.SpellId)
+            ?? throw new RuleViolation("Monster spell is absent from its pinned spell pack.");
+        if (spell.Id!="healing-word" || spell.Level!=1 || known.LimitedUseGroup is null)
+            throw new RuleViolation("This monster spell has no executable resolver.");
+        if (!(monster.LimitedUsesRemaining ?? []).TryGetValue(known.LimitedUseGroup,out var remaining) || remaining<1)
+            throw new RuleViolation("Monster limited-use spell is exhausted.");
+        if (spell.Components.Contains('V') && !request.VerbalAvailable ||
+            spell.Components.Contains('S') && !request.SomaticAvailable ||
+            spell.Components.Contains('M') && !request.MaterialAvailable)
+            throw new RuleViolation("Required spell components are unavailable.");
+        var caster=s.Characters[actor.CharacterId];
+        var profile=s.Profiles[caster.Id];
+        var wisdom=caster.AbilityModifier(Ability.Wisdom);
+        var casting=new ClassSpellcasting("cleric",1,Ability.Wisdom,wisdom,
+            wisdom+2,8+wisdom+2,0,0);
+        var resources=s.Encounter.UseMagic(actor.Id,Effects(s,actor.Id),spell.CastingTime,false);
+        var targets=new SpellCombatResolver(dice).Resolve(s.Encounter,actor.Id,caster,profile,
+            s.Characters,s.Profiles,spell,casting,request.Targets,1);
+        var uses=new Dictionary<string,int>(monster.LimitedUsesRemaining!);
+        uses[known.LimitedUseGroup]=remaining-1;
+        s.MonsterUpdates.Add(monster.Id,monster with { LimitedUsesRemaining=uses });
+        return await Save(s,"CombatSpellCast",new CombatSpellResolution("monster",spell.Id,1,
+            null,null,resources,targets),ct,actor.Id);
+    }
+
     public async Task<CombatCommandResult<FontOfMagicResult>> ConvertSpellSlotAsync(Guid id,
         CombatConvertSpellSlot request,CancellationToken ct = default)
     {
@@ -274,6 +361,28 @@ public sealed class CombatService(ICampaignStore campaigns, ICombatStore store, 
         }, ct);
     public Task<CombatCommandResult<EncounterState>> EndAsync(Guid id, CancellationToken ct = default) =>
         Execute(id, "CombatEnded", s => { s.Encounter.Complete(); return s.Encounter.State; }, ct);
+    public async Task<CombatCommandResult<EncounterState>> CompleteAsync(Guid id,
+        CompleteEncounter request,CancellationToken ct=default)
+    {
+        if (!Enum.IsDefined(request.Outcome)) throw new RuleViolation("Invalid encounter outcome.");
+        var s=await Load(id,ct);
+        if (s.Encounter.State.Revision!=request.ExpectedRevision)
+            throw new StateConflictException("Encounter revision changed. Reload before completion.");
+        s.Encounter.Complete();
+        var defeated=new List<Guid>(); var available=0;
+        if (monsterStore is not null && monsterCatalog is not null)
+        foreach (var member in s.Encounter.State.Combatants.Where(x=>x.Kind==CombatantKind.Monster))
+        {
+            if (!s.Characters[member.CharacterId].Health.State.Dead) continue;
+            var instance=await monsterStore.GetAsync(member.CharacterId,ct)
+                ?? throw new RuleViolation("Monster combatant has no pinned instance.");
+            var pack=await monsterCatalog.GetAsync(s.Campaign.Ruleset,instance.PackVersion,ct);
+            available=checked(available+pack.Monsters.Single(x=>x.Id==instance.DefinitionId).ExperiencePoints);
+            defeated.Add(instance.Id);
+        }
+        var rewards=new EncounterRewardState(id,request.Outcome,available,[],defeated.ToArray());
+        return await Save(s,"EncounterCompleted",s.Encounter.State,ct,null,rewards);
+    }
     public Task<CombatCommandResult<ActiveCondition>> ApplyConditionAsync(Guid id, ApplyCombatCondition request, CancellationToken ct = default) =>
         Execute(id, "ConditionApplied", s => {
             s.Encounter.RequireOpen(); var member = s.Encounter.Combatant(request.CombatantId);
@@ -411,7 +520,8 @@ public sealed class CombatService(ICampaignStore campaigns, ICombatStore store, 
     { var member = s.Encounter.Combatant(memberId); return new(s.Characters[member.CharacterId], s.Profiles[member.CharacterId]); }
     private async Task<CombatCommandResult<T>> Execute<T>(Guid id, string type, Func<Session, T> command, CancellationToken ct, Guid? subject = null)
     { var s = await Load(id, ct); var result = command(s); return await Save(s, type, result, ct, subject); }
-    private async Task<CombatCommandResult<T>> Save<T>(Session s, string type, T result, CancellationToken ct, Guid? subject = null)
+    private async Task<CombatCommandResult<T>> Save<T>(Session s, string type, T result, CancellationToken ct,
+        Guid? subject = null,EncounterRewardState? rewardState = null)
     {
         Campaign? clockAfter = null;
         if (s.Encounter.State.Status == EncounterStatus.Active && type != "CombatStarted")
@@ -441,13 +551,25 @@ public sealed class CombatService(ICampaignStore campaigns, ICombatStore store, 
         }
         // The HTTP/event snapshot should carry the committed revision, like the outer result.
         if (result is EncounterState) result = (T)(object)(s.Encounter.State with { Revision = s.Encounter.State.Revision + 1 });
-        Emit(s, type, result, subject);
+        if (rewardState is null) Emit(s,type,result,subject);
+        else Emit(s,type,new { Encounter=s.Encounter.State,Reward=rewardState },subject);
+        if (monsterStore is not null)
+        foreach (var member in s.Encounter.State.Combatants)
+        {
+            if (s.OriginallyDeadIds.Contains(member.CharacterId) ||
+                !s.Characters[member.CharacterId].Health.State.Dead) continue;
+            var monster = await monsterStore.GetAsync(member.CharacterId,ct);
+            if (monster is not null)
+                Emit(s,"MonsterDefeated",new { MonsterId=monster.Id,
+                    monster.DefinitionId,CombatantId=member.Id,Trigger=type },member.Id);
+        }
         if (type == "CombatStarted")
         {
             var started = s.Events[^1]; s.Events.RemoveAt(s.Events.Count - 1); s.Events.Insert(0, started);
         }
         await store.SaveEncounterAsync(s.Encounter, s.Characters.Values.ToArray(), s.Profiles.Values.ToArray(), s.Events, false, ct,
-            s.ProgressionUpdates, clockAfter is null ? null : s.Campaign, clockAfter);
+            s.ProgressionUpdates, clockAfter is null ? null : s.Campaign, clockAfter,
+            s.MonsterUpdates,rewardState,s.InventoryUpdates);
         return new(s.Encounter.State.Id, s.Encounter.State.Revision + 1, s.Encounter.State.Round, s.Encounter.State.TurnNumber, result);
     }
     private void Emit<T>(Session s, string type, T data, Guid? subject = null) => s.Events.Add(Event(s.Campaign, type,
@@ -463,7 +585,8 @@ public sealed class CombatService(ICampaignStore campaigns, ICombatStore store, 
         // Read each character revision BEFORE its profile; subsequent writes guard the complete read set.
         foreach (var member in encounter.State.Combatants)
         { characters.Add(member.CharacterId, await Character(member.CharacterId, ct)); profiles.Add(member.CharacterId, await Profile(member.CharacterId, ct)); }
-        return new(encounter, campaign, content, characters, profiles, [],new(),encounter.State.Round);
+        return new(encounter, campaign, content, characters, profiles, [],new(),encounter.State.Round,
+            characters.Values.Where(x=>x.Health.State.Dead).Select(x=>x.Id).ToHashSet(),new(),new());
     }
     private async Task<Campaign> Campaign(Guid id, CancellationToken ct)
     { var result = await campaigns.GetCampaignAsync(id, ct) ?? throw new NotFoundException("Campaign not found."); result.Ruleset.RequireSupported(); return result; }

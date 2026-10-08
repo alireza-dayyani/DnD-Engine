@@ -1,0 +1,90 @@
+{
+  "version": "1",
+  "monsters": [
+    {
+      "id": "goblin-minion", "name": "Goblin Minion", "type": "Fey (Goblinoid)",
+      "size": "Small", "alignment": "Chaotic Neutral", "challengeRating": "1/8",
+      "experiencePoints": 25, "abilities": { "strength": 8, "dexterity": 15,
+        "constitution": 10, "intelligence": 10, "wisdom": 8, "charisma": 8 },
+      "hitPoints": 7, "armorClass": 12, "speed": 30,
+      "savingThrows": {}, "skills": { "stealth": 6 },
+      "senses": ["Darkvision 60 ft.", "Passive Perception 9"],
+      "languages": ["Common", "Goblin"],
+      "resistances": [], "immunities": [], "vulnerabilities": [],
+      "conditionImmunities": [], "gear": [{ "definitionId": "dagger", "quantity": 3 }],
+      "traits": [],
+      "actions": [
+        { "id": "dagger", "name": "Dagger", "weaponId": "dagger", "attackBonus": 4,
+          "damageDice": "1d4", "damageModifier": 2, "damageType": "Piercing",
+          "supported": true, "reachFeet": 5, "normalRangeFeet": 20, "longRangeFeet": 60 },
+        { "id": "nimble-escape", "name": "Nimble Escape", "weaponId": null,
+          "attackBonus": 0, "damageDice": null, "damageModifier": 0,
+          "damageType": null, "supported": false,
+          "deferredReason": "Bonus-action Hide and Disengage are not modeled for monster traits." }
+      ],
+      "spells": []
+    },
+    {
+      "id": "skeleton", "name": "Skeleton", "type": "Undead",
+      "size": "Medium", "alignment": "Lawful Evil", "challengeRating": "1/4",
+      "experiencePoints": 50, "abilities": { "strength": 10, "dexterity": 16,
+        "constitution": 15, "intelligence": 6, "wisdom": 8, "charisma": 5 },
+      "hitPoints": 13, "armorClass": 14, "speed": 30,
+      "savingThrows": {}, "skills": {},
+      "senses": ["Darkvision 60 ft.", "Passive Perception 9"],
+      "languages": ["Understands Common plus one other language but cannot speak"],
+      "resistances": [], "immunities": ["Poison"],
+      "vulnerabilities": ["Bludgeoning"],
+      "conditionImmunities": ["Exhaustion", "Poisoned"],
+      "gear": [{ "definitionId": "shortsword", "quantity": 1 },
+        { "definitionId": "shortbow", "quantity": 1 }], "traits": [],
+      "actions": [
+        { "id": "shortsword", "name": "Shortsword", "weaponId": "shortsword",
+          "attackBonus": 5, "damageDice": "1d6", "damageModifier": 3,
+          "damageType": "Piercing", "supported": true, "reachFeet": 5 },
+        { "id": "shortbow", "name": "Shortbow", "weaponId": "shortbow",
+          "attackBonus": 5, "damageDice": "1d6", "damageModifier": 3,
+          "damageType": "Piercing", "supported": true,
+          "normalRangeFeet": 80, "longRangeFeet": 320 }
+      ],
+      "spells": []
+    },
+    {
+      "id": "priest-acolyte", "name": "Priest Acolyte", "type": "Humanoid (Cleric)",
+      "size": "Medium or Small", "alignment": "Neutral", "challengeRating": "1/4",
+      "experiencePoints": 50, "abilities": { "strength": 14, "dexterity": 10,
+        "constitution": 12, "intelligence": 10, "wisdom": 14, "charisma": 11 },
+      "hitPoints": 11, "armorClass": 13, "speed": 30,
+      "savingThrows": {}, "skills": { "medicine": 4, "religion": 2 },
+      "senses": ["Passive Perception 12"], "languages": ["Common"],
+      "resistances": [], "immunities": [], "vulnerabilities": [],
+      "conditionImmunities": [], "gear": [
+        { "definitionId": "chain-shirt", "quantity": 1 },
+        { "definitionId": "mace", "quantity": 1 }],
+      "traits": [],
+      "actions": [
+        { "id": "mace", "name": "Mace", "weaponId": "mace",
+          "attackBonus": 4, "damageDice": "1d6", "damageModifier": 2,
+          "damageType": "Bludgeoning", "supported": false, "reachFeet": 5,
+          "deferredReason": "Additional 1d4 Radiant damage is not supported by weapon attacks." },
+        { "id": "radiant-flame", "name": "Radiant Flame", "weaponId": null,
+          "attackBonus": 4, "damageDice": "2d6", "damageModifier": 0,
+          "damageType": "Radiant", "supported": false,
+          "normalRangeFeet": 60, "longRangeFeet": 60,
+          "deferredReason": "Monster-specific ranged spell attack is not yet supported." }
+      ],
+      "spells": [
+        { "spellId": "light", "frequency": "At Will", "supported": false,
+          "deferredReason": "Light effect is not in the current spell pack." },
+        { "spellId": "thaumaturgy", "frequency": "At Will", "supported": false,
+          "deferredReason": "Thaumaturgy is not in the current spell pack." },
+        { "spellId": "bless", "frequency": "Divine Aid 1/Day", "supported": false,
+          "deferredReason": "Bless effect is not in the current spell pack." },
+        { "spellId": "healing-word", "frequency": "Divine Aid 1/Day", "supported": true,
+          "limitedUseGroup": "divine-aid", "usesPerDay": 1 },
+        { "spellId": "sanctuary", "frequency": "Divine Aid 1/Day", "supported": false,
+          "deferredReason": "Sanctuary effect is not in the current spell pack." }
+      ]
+    }
+  ]
+}

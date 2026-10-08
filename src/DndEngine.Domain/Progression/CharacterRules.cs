@@ -38,7 +38,8 @@ public sealed record Proficiency(ProficiencyKind Kind, string Id, string Source)
 public sealed record FeatureGrant(string Id, string Name, string Source, bool Deferred);
 public sealed record ResourceState(string Id, string Source, int Current, int Maximum, RecoveryKind Recovery);
 public sealed record HitDiePool(int Sides, int Total, int Available);
-public sealed record InventoryItem(Guid Id, string DefinitionId, bool Equipped = false);
+public sealed record InventoryItem(Guid Id, string DefinitionId, bool Equipped = false,
+    int Quantity = 1);
 public sealed record ClassLevel(string ClassId, int Level);
 public sealed record SpellSlotUsage(int[] SharedSpentByLevel, int PactSpent,
     int[]? CreatedAvailableByLevel = null);
@@ -54,7 +55,7 @@ public sealed record ProgressionState(string SpeciesId, string? SpeciesVariantId
     MetamagicOption[]? MetamagicOptions = null, int SorceryPointsSpent = 0,
     Dictionary<int,string>? MysticArcanumChoices = null, int[]? MysticArcanumSpentLevels = null,
     bool ArcaneRecoveryUsed = false, bool SorcerousRestorationUsed = false,
-    long ComprehendLanguagesUntilGameSecond = 0);
+    long ComprehendLanguagesUntilGameSecond = 0, long CurrencyCopper = 0);
 
 public sealed record StatisticPart(string Source, int Value);
 public sealed record DerivedStatistic(int Total, StatisticPart[] Parts);

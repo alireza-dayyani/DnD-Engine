@@ -50,6 +50,20 @@ Official sources read:
 - [Official English SRD 5.2.1 PDF](https://media.dndbeyond.com/compendium-images/srd/5.2/SRD_CC_v5.2.1.pdf). Relevant sections, not all 364 pages, were read for this slice.
 - [CC BY 4.0 deed](https://creativecommons.org/licenses/by/4.0/) and [legal code](https://creativecommons.org/licenses/by/4.0/legalcode).
 
+## Phase 5 source-to-behavior map
+
+The [official SRD 5.2.1 PDF](https://media.dndbeyond.com/compendium-images/srd/5.2/SRD_CC_v5.2.1.pdf) is the source for these additions. Page numbers are printed page numbers.
+
+| Source | Adapted behavior and boundary |
+|---|---|
+| p. 290, Goblin Minion | AC 12, HP 7, Dexterity 15, three daggers; dagger attack uses the existing melee/thrown weapon resolver. Nimble Escape is marked deferred. |
+| pp. 325–326, Skeleton | AC 14, HP 13, bludgeoning vulnerability, Poison immunity, Poisoned/Exhaustion immunities, shortsword and shortbow attacks using existing weapon definitions. |
+| p. 316, Priest Acolyte | AC 13, HP 11 and Divine Aid's once-per-day Healing Word through the existing spell resolver. Mace radiant rider and Radiant Flame are marked deferred instead of approximated. |
+| pp. 99, 236, Potion of Healing | 2d4 + 2 healing; Bonus Action to drink/administer within 5 feet in combat. The listed 50 GP price is represented as 5,000 copper in the definition; purchase automation is not implemented. |
+| pp. 22, 181, 255, XP and challenge | Printed monster XP values are recorded in a completed encounter's eligible pool. Allocations are validated and audited; automatic character level advancement is deferred. |
+
+Definitions are adapted data, not a copy of full stat-block prose. The existing `ATTRIBUTION.md` contains the SRD's required CC BY 4.0 attribution. The ruleset and independent pack hashes prevent silently changing installed data; the PDF is linked rather than vendored.
+
 ## Phase 1 source-to-behavior map (preserved standalone endpoints)
 
 Page numbers below are the PDF's printed pages.

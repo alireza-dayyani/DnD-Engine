@@ -27,6 +27,9 @@ public sealed class SqliteProgressionStore(CampaignDbContext db) : IProgressionS
     {
         db.Characters.Add(SqliteCampaignStore.ToRow(character));
         db.Progressions.Add(new() { CharacterId = character.Id, StateJson = JsonSerializer.Serialize(state,CombatCatalog.Json) });
+        db.InventoryStates.Add(new() { OwnerId=character.Id,
+            ItemsJson=JsonSerializer.Serialize(state.Inventory,CombatCatalog.Json),
+            CopperPieces=state.CurrencyCopper });
         db.CombatProfiles.Add(new() { CharacterId = character.Id, StateJson = JsonSerializer.Serialize(profile.State,CombatCatalog.Json) });
         db.Events.Add(SqliteCampaignStore.ToRow(entry));
         await Commit(ct);
@@ -39,6 +42,7 @@ public sealed class SqliteProgressionStore(CampaignDbContext db) : IProgressionS
         db.Entry(row).Property(x => x.Revision).OriginalValue = character.Revision;
         var progression = await db.Progressions.SingleAsync(x => x.CharacterId == character.Id,ct);
         progression.StateJson = JsonSerializer.Serialize(state,CombatCatalog.Json);
+        await SyncInventory(character.Id,state,ct);
         var combat = await db.CombatProfiles.SingleAsync(x => x.CharacterId == character.Id,ct);
         combat.StateJson = JsonSerializer.Serialize(profile.State,CombatCatalog.Json);
         db.Events.Add(SqliteCampaignStore.ToRow(entry));
@@ -56,6 +60,7 @@ public sealed class SqliteProgressionStore(CampaignDbContext db) : IProgressionS
         db.Entry(characterRow).Property(x => x.Revision).OriginalValue = character.Revision;
         var progression = await db.Progressions.SingleAsync(x => x.CharacterId == character.Id,ct);
         progression.StateJson = JsonSerializer.Serialize(state,CombatCatalog.Json);
+        await SyncInventory(character.Id,state,ct);
         var combat = await db.CombatProfiles.SingleAsync(x => x.CharacterId == character.Id,ct);
         combat.StateJson = JsonSerializer.Serialize(profile.State,CombatCatalog.Json);
         var campaign = await db.Campaigns.SingleAsync(x => x.Id == before.Id,ct);
@@ -72,5 +77,15 @@ public sealed class SqliteProgressionStore(CampaignDbContext db) : IProgressionS
         catch (DbUpdateException ex) when (ex.InnerException is SqliteException { SqliteErrorCode: 19 })
         { throw new StateConflictException("Character write conflicted with existing state. Reload before trying again."); }
         finally { db.ChangeTracker.Clear(); }
+    }
+    private async Task SyncInventory(Guid ownerId,ProgressionState state,CancellationToken ct)
+    {
+        var row=await db.InventoryStates.SingleOrDefaultAsync(x=>x.OwnerId==ownerId,ct);
+        if (row is null)
+        {
+            row=new() { OwnerId=ownerId }; db.InventoryStates.Add(row);
+        }
+        row.ItemsJson=JsonSerializer.Serialize(state.Inventory,CombatCatalog.Json);
+        row.CopperPieces=state.CurrencyCopper;
     }
 }

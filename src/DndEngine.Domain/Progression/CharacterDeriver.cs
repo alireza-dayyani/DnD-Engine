@@ -129,6 +129,9 @@ public static class CharacterDeriver
             proficiencies.Any(p => p.Kind == ProficiencyKind.Skill && p.Id == s.Id) ? proficiencyBonus : 0))).ToArray();
         var inventory = state.Inventory.Select(x => (Instance:x, Definition:FindItem(x.DefinitionId,rules,combat))).ToArray();
         if (inventory.Select(x => x.Instance.Id).Distinct().Count() != inventory.Length) throw new RuleViolation("Duplicate item IDs.");
+        if (inventory.Any(x=>x.Instance.Quantity<1 || x.Instance.Quantity>1_000_000 ||
+            x.Definition.Kind is not ItemKind.Gear && x.Instance.Quantity!=1))
+            throw new RuleViolation("Invalid item quantity.");
         var armor = inventory.Where(x => x.Instance.Equipped && x.Definition.Kind == ItemKind.Armor).ToArray();
         var shields = inventory.Where(x => x.Instance.Equipped && x.Definition.Kind == ItemKind.Shield).ToArray();
         if (armor.Length > 1 || shields.Length > 1) throw new RuleViolation("Only one armor and one shield can be equipped.");
@@ -207,6 +210,7 @@ public static class CharacterDeriver
         rules.Items.SingleOrDefault(x => x.Id == id) ??
         ((rules.ToolIds ?? []).Contains(id) ? new ItemDefinition(id,id,ItemKind.Gear) : null) ??
         (id == "black-pearl-powder-500gp" ? new ItemDefinition(id,"Crushed black pearl powder (500+ GP)",ItemKind.Gear) : null) ??
+        (id == "potion-of-healing" ? new ItemDefinition(id,"Potion of Healing",ItemKind.Gear) : null) ??
         (combat.Weapons.Any(x => x.Id == id) ? new ItemDefinition(id,id,ItemKind.Weapon) : throw new RuleViolation("Unknown item definition."));
     public static bool WeaponProficient(string id, IReadOnlyList<Proficiency> proficiencies, CombatContent combat)
     {

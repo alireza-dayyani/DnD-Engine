@@ -681,7 +681,7 @@ public sealed class ProgressionService(ICampaignStore campaigns, IProgressionSto
     {
         return SpellPreparation.Add([],new ClassLevel(classId,1),catalog,selected ?? [],wizardSpellbook);
     }
-    private static Character Materialize(Guid id,Guid campaignId,string name,ProgressionState state,CharacterRules rules,
+    internal static Character Materialize(Guid id,Guid campaignId,string name,ProgressionState state,CharacterRules rules,
         CombatContent combat,HitPoints health,long revision)
     {
         var level = state.Classes.Sum(x => x.Level);
@@ -695,7 +695,7 @@ public sealed class ProgressionService(ICampaignStore campaigns, IProgressionSto
             sheet.Proficiencies.Where(x => x.Kind == ProficiencyKind.Save).Select(x => Enum.Parse<Ability>(x.Id)),
             sheet.ArmorClass.Total,health,revision);
     }
-    private static CombatProfile Profile(Guid id,CharacterSheet sheet,CombatContent combat,CombatProfile? old)
+    internal static CombatProfile Profile(Guid id,CharacterSheet sheet,CombatContent combat,CombatProfile? old)
     {
         var weaponIds = sheet.Inventory.Where(x => combat.Weapons.Any(w => w.Id == x.DefinitionId))
             .Select(x => x.Id).ToHashSet();

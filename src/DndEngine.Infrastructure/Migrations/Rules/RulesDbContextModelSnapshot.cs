@@ -47,6 +47,28 @@ namespace DndEngine.Infrastructure.Migrations.Rules
                     b.ToTable("CharacterContent");
                 });
 
+            modelBuilder.Entity("DndEngine.Infrastructure.MonsterPackRow", b =>
+                {
+                    b.Property<string>("RulesetId").HasColumnType("TEXT");
+                    b.Property<string>("RulesetVersion").HasColumnType("TEXT");
+                    b.Property<string>("PackVersion").HasColumnType("TEXT");
+                    b.Property<string>("ContentHash").IsRequired().HasColumnType("TEXT");
+                    b.Property<string>("DataJson").IsRequired().HasColumnType("TEXT");
+                    b.HasKey("RulesetId", "RulesetVersion", "PackVersion");
+                    b.ToTable("MonsterPacks");
+                });
+
+            modelBuilder.Entity("DndEngine.Infrastructure.EncounterItemPackRow", b =>
+                {
+                    b.Property<string>("RulesetId").HasColumnType("TEXT");
+                    b.Property<string>("RulesetVersion").HasColumnType("TEXT");
+                    b.Property<string>("PackVersion").HasColumnType("TEXT");
+                    b.Property<string>("ContentHash").IsRequired().HasColumnType("TEXT");
+                    b.Property<string>("DataJson").IsRequired().HasColumnType("TEXT");
+                    b.HasKey("RulesetId", "RulesetVersion", "PackVersion");
+                    b.ToTable("EncounterItemPacks");
+                });
+
             modelBuilder.Entity("DndEngine.Infrastructure.SpellContentRow", b =>
                 {
                     b.Property<string>("RulesetId").HasColumnType("TEXT");
@@ -134,6 +156,18 @@ namespace DndEngine.Infrastructure.Migrations.Rules
                 {
                     b.HasOne("DndEngine.Infrastructure.RulesetRow", null).WithMany()
                         .HasForeignKey("RulesetId", "Version").OnDelete(DeleteBehavior.Restrict).IsRequired();
+                });
+
+            modelBuilder.Entity("DndEngine.Infrastructure.MonsterPackRow", b =>
+                {
+                    b.HasOne("DndEngine.Infrastructure.RulesetRow", null).WithMany()
+                        .HasForeignKey("RulesetId", "RulesetVersion").OnDelete(DeleteBehavior.Restrict).IsRequired();
+                });
+
+            modelBuilder.Entity("DndEngine.Infrastructure.EncounterItemPackRow", b =>
+                {
+                    b.HasOne("DndEngine.Infrastructure.RulesetRow", null).WithMany()
+                        .HasForeignKey("RulesetId", "RulesetVersion").OnDelete(DeleteBehavior.Restrict).IsRequired();
                 });
 
             modelBuilder.Entity("DndEngine.Infrastructure.SpellContentRow", b =>

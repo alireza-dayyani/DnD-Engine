@@ -204,6 +204,66 @@ namespace DndEngine.Infrastructure.Migrations.Campaign
                     b.ToTable("Events");
                 });
 
+            modelBuilder.Entity("DndEngine.Infrastructure.IdempotencyOperationRow", b =>
+                {
+                    b.Property<Guid>("OperationId").HasColumnType("TEXT");
+                    b.Property<DateTimeOffset>("CompletedAtUtc").HasColumnType("TEXT");
+                    b.Property<string>("ContentType").HasColumnType("TEXT");
+                    b.Property<string>("Location").HasColumnType("TEXT");
+                    b.Property<string>("RequestHash").IsRequired().HasColumnType("TEXT");
+                    b.Property<byte[]>("ResponseBody").IsRequired().HasColumnType("BLOB");
+                    b.Property<int>("StatusCode").HasColumnType("INTEGER");
+                    b.HasKey("OperationId");
+                    b.ToTable("IdempotencyOperations");
+                });
+
+            modelBuilder.Entity("DndEngine.Infrastructure.EncounterRewardRow", b =>
+                {
+                    b.Property<Guid>("EncounterId").HasColumnType("TEXT");
+                    b.Property<string>("Outcome").IsRequired().HasColumnType("TEXT");
+                    b.Property<int>("AvailableExperience").HasColumnType("INTEGER");
+                    b.Property<string>("AwardsJson").IsRequired().HasColumnType("TEXT");
+                    b.Property<string>("DefeatedMonsterIdsJson").IsRequired().HasColumnType("TEXT");
+                    b.Property<long>("Revision").IsConcurrencyToken().HasColumnType("INTEGER");
+                    b.HasKey("EncounterId");
+                    b.ToTable("EncounterRewards");
+                });
+
+            modelBuilder.Entity("DndEngine.Infrastructure.DroppedItemRow", b =>
+                {
+                    b.Property<Guid>("Id").HasColumnType("TEXT");
+                    b.Property<Guid>("CampaignId").HasColumnType("TEXT");
+                    b.Property<Guid>("SourceOwnerId").HasColumnType("TEXT");
+                    b.Property<string>("DefinitionId").IsRequired().HasColumnType("TEXT");
+                    b.Property<int>("Quantity").HasColumnType("INTEGER");
+                    b.HasKey("Id");
+                    b.HasIndex("CampaignId");
+                    b.ToTable("DroppedItems");
+                });
+
+            modelBuilder.Entity("DndEngine.Infrastructure.InventoryStateRow", b =>
+                {
+                    b.Property<Guid>("OwnerId").HasColumnType("TEXT");
+                    b.Property<string>("ItemsJson").IsRequired().HasColumnType("TEXT");
+                    b.Property<long>("CopperPieces").HasColumnType("INTEGER");
+                    b.HasKey("OwnerId");
+                    b.ToTable("InventoryStates");
+                });
+
+            modelBuilder.Entity("DndEngine.Infrastructure.MonsterInstanceRow", b =>
+                {
+                    b.Property<Guid>("Id").HasColumnType("TEXT");
+                    b.Property<Guid>("CampaignId").HasColumnType("TEXT");
+                    b.Property<string>("DefinitionId").IsRequired().HasColumnType("TEXT");
+                    b.Property<string>("PackVersion").IsRequired().HasColumnType("TEXT");
+                    b.Property<string>("SpellPackVersion").IsRequired().HasColumnType("TEXT");
+                    b.Property<string>("LimitedUsesJson").IsRequired().HasColumnType("TEXT");
+                    b.Property<long>("Revision").IsConcurrencyToken().HasColumnType("INTEGER");
+                    b.HasKey("Id");
+                    b.HasIndex("CampaignId");
+                    b.ToTable("MonsterInstances");
+                });
+
             modelBuilder.Entity("DndEngine.Infrastructure.ProgressionRow", b =>
                 {
                     b.Property<Guid>("CharacterId").HasColumnType("TEXT");
@@ -266,6 +326,32 @@ namespace DndEngine.Infrastructure.Migrations.Campaign
                         .WithMany()
                         .HasForeignKey("CharacterId")
                         .OnDelete(DeleteBehavior.Restrict);
+                });
+
+            modelBuilder.Entity("DndEngine.Infrastructure.InventoryStateRow", b =>
+                {
+                    b.HasOne("DndEngine.Infrastructure.CharacterRow", null).WithMany()
+                        .HasForeignKey("OwnerId").OnDelete(DeleteBehavior.Restrict).IsRequired();
+                });
+
+            modelBuilder.Entity("DndEngine.Infrastructure.EncounterRewardRow", b =>
+                {
+                    b.HasOne("DndEngine.Infrastructure.EncounterRow", null).WithMany()
+                        .HasForeignKey("EncounterId").OnDelete(DeleteBehavior.Restrict).IsRequired();
+                });
+
+            modelBuilder.Entity("DndEngine.Infrastructure.DroppedItemRow", b =>
+                {
+                    b.HasOne("DndEngine.Infrastructure.CampaignRow", null).WithMany()
+                        .HasForeignKey("CampaignId").OnDelete(DeleteBehavior.Restrict).IsRequired();
+                });
+
+            modelBuilder.Entity("DndEngine.Infrastructure.MonsterInstanceRow", b =>
+                {
+                    b.HasOne("DndEngine.Infrastructure.CharacterRow", null).WithMany()
+                        .HasForeignKey("Id").OnDelete(DeleteBehavior.Restrict).IsRequired();
+                    b.HasOne("DndEngine.Infrastructure.CampaignRow", null).WithMany()
+                        .HasForeignKey("CampaignId").OnDelete(DeleteBehavior.Restrict).IsRequired();
                 });
 
             modelBuilder.Entity("DndEngine.Infrastructure.ProgressionRow", b =>

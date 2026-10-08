@@ -53,6 +53,18 @@ No separate Round, Turn, Attack or Damage database entities are needed: current 
 | InventoryItem | Stable instance ID referencing a canonical item or Phase 2 weapon; equip state never modifies canonical definitions |
 | FeatureGrant | Source and `Deferred` marker for each acquired species/background/class/subclass/feat benefit |
 
+## Phase 5 additions
+
+| Concept | Representation and invariant |
+|---|---|
+| MonsterDefinition / MonsterPack | Immutable, validated SRD monster data in a versioned, hash-checked rules pack; supported attacks/spells identify existing resolvers and deferred mechanics carry reasons |
+| MonsterInstance | Campaign creature ID, definition/pack pins, limited-use resources and revision; HP/conditions/weapons use existing character/combat projections |
+| InventoryState | Owner's item instances, quantities and copper pieces; synchronized with choice-based progression when present |
+| EncounterItemPack | Immutable supplemental item definitions for implemented consumables; Potion of Healing is the first entry |
+| DroppedItem | Recoverable campaign-owned item instance or split stack outside an inventory; one pickup removes it atomically |
+| EncounterRewardState | Explicit outcome, defeated monster IDs, printed XP pool, award ledger and optimistic revision; XP is recorded, not converted into levels |
+| IdempotencyOperation | API operation GUID, exact request fingerprint and original response, committed with the command in campaign SQLite |
+
 ## Investigated, intentionally deferred
 
 | Concept | Intended boundary and modeling approach |
@@ -60,7 +72,7 @@ No separate Round, Turn, Attack or Damage database entities are needed: current 
 | Complete feature/subclass behavior | Phase 3 records the choice and feature marker; future focused behaviors should consume the existing definitions |
 | Spell slots | Spell slots and multiclass spellcasting need a specialized Phase 4 model, not arbitrary feature counters |
 | General effects / durations | Extend implemented condition instances with specific spell/feature triggers and world time, not arbitrary scripts |
-| Complete equipment economy | Add exact package branches, quantities, currency, encumbrance and held/dropped state beyond current owned/equipped items |
+| Complete equipment economy | Phase 5 adds quantities, copper, drop/pickup and one consumable. Exact package branches, prices/purchases, encumbrance and held-hand state remain deferred |
 | Spell / SpellSlot | Versioned spell definition and reusable effects; slots tracked on the character; no universal scripting language |
 | NPC | Canonical definition/reference separated from mutable campaign NPC state; no proprietary lore ingestion |
 | Relationship | Directed campaign participant IDs, state and source events; narrative interpretation remains external |

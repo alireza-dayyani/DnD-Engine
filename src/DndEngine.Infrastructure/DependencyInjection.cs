@@ -21,8 +21,16 @@ public static class DependencyInjection
         services.AddScoped<ICampaignStore, SqliteCampaignStore>();
         services.AddScoped<IRulesCatalog, RulesCatalog>();
         services.AddScoped<ICombatCatalog, CombatCatalog>(); services.AddScoped<ICombatStore, SqliteCombatStore>();
+        services.AddScoped<IEncounterRewardStore, SqliteCombatStore>();
         services.AddScoped<ICharacterRulesCatalog, CharacterRulesCatalog>(); services.AddScoped<IProgressionStore, SqliteProgressionStore>();
         services.AddScoped<ISpellCatalog, SpellCatalog>();
+        services.AddScoped<IMonsterCatalog, MonsterCatalog>();
+        services.AddScoped<IMonsterStore, SqliteMonsterStore>();
+        services.AddScoped<IEncounterItemCatalog, EncounterItemCatalog>();
+        services.AddScoped<IInventoryStore, SqliteInventoryStore>();
+        services.AddScoped<InventoryService>();
+        services.AddScoped<EncounterRewardService>();
+        services.AddScoped<MonsterService>();
         services.AddScoped<ProgressionService>();
         services.AddScoped<CombatService>();
         services.AddSingleton<IDiceRoller, RandomDiceRoller>(); services.AddSingleton(TimeProvider.System);
@@ -40,6 +48,8 @@ public static class DependencyInjection
         await CombatCatalog.ImportAsync(rules, ct);
         await CharacterRulesCatalog.ImportAsync(rules, ct);
         await SpellCatalog.ImportAsync(rules, ct);
+        await MonsterCatalog.ImportAsync(rules, ct);
+        await EncounterItemCatalog.ImportAsync(rules, ct);
         await campaign.Database.MigrateAsync(ct);
         scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("DndEngine.Startup")
             .LogInformation("Initialized SQLite databases; supported ruleset {Ruleset}/{Version}", Ruleset.Current.Id, Ruleset.Current.Version);
