@@ -29,6 +29,13 @@ public static class DependencyInjection
         services.AddScoped<IEncounterItemCatalog, EncounterItemCatalog>();
         services.AddScoped<IInventoryStore, SqliteInventoryStore>();
         services.AddScoped<IWorldStore, SqliteWorldStore>();
+        services.AddScoped<ICampaignAccessStore, SqliteCampaignAccessStore>();
+        services.AddScoped<CampaignAccessService>();
+        services.AddScoped<DurableMcpCommandRunner>();
+        services.AddScoped<IEncounterIndex, SqliteEncounterIndex>();
+        services.AddScoped<DmContextService>();
+        services.AddScoped<INarrativeConsequenceStore, SqliteNarrativeConsequenceStore>();
+        services.AddScoped<NarrativeConsequenceService>();
         services.AddScoped<WorldService>();
         services.AddScoped<InventoryService>();
         services.AddScoped<EncounterRewardService>();

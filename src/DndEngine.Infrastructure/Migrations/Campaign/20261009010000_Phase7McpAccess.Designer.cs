@@ -3,6 +3,7 @@ using System;
 using DndEngine.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace DndEngine.Infrastructure.Migrations.Campaign
 {
     [DbContext(typeof(CampaignDbContext))]
-    partial class CampaignDbContextModelSnapshot : ModelSnapshot
+    [Migration("20261009010000_Phase7McpAccess")]
+    partial class Phase7McpAccess
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "10.0.12");
@@ -380,46 +383,6 @@ namespace DndEngine.Infrastructure.Migrations.Campaign
                     b.ToTable("MonsterInstances");
                 });
 
-            modelBuilder.Entity("DndEngine.Infrastructure.NarrativeConsequenceRow", b =>
-                {
-                    b.Property<Guid>("SourceEventId")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("TEXT");
-
-                    b.Property<long?>("AppliedWorldRevision")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<Guid>("CampaignId")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Cause")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("ChangesJson")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<long>("ExpectedWorldRevision")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<DateTimeOffset?>("ResolvedAtUtc")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("SourceEventId");
-
-                    b.HasIndex("CampaignId");
-
-                    b.ToTable("NarrativeConsequences", t =>
-                        {
-                            t.HasCheckConstraint("CK_NarrativeConsequence_Status", "Status IN ('Proposed', 'Applied', 'Dismissed')");
-                        });
-                });
-
             modelBuilder.Entity("DndEngine.Infrastructure.ProgressionRow", b =>
                 {
                     b.Property<Guid>("CharacterId")
@@ -573,15 +536,6 @@ namespace DndEngine.Infrastructure.Migrations.Campaign
                     b.HasOne("DndEngine.Infrastructure.CharacterRow", null)
                         .WithMany()
                         .HasForeignKey("Id")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-                });
-
-            modelBuilder.Entity("DndEngine.Infrastructure.NarrativeConsequenceRow", b =>
-                {
-                    b.HasOne("DndEngine.Infrastructure.CampaignRow", null)
-                        .WithMany()
-                        .HasForeignKey("CampaignId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
                 });

@@ -4,6 +4,7 @@
     <Project Path="src/DndEngine.Application/DndEngine.Application.csproj" />
     <Project Path="src/DndEngine.Domain/DndEngine.Domain.csproj" />
     <Project Path="src/DndEngine.Infrastructure/DndEngine.Infrastructure.csproj" />
+    <Project Path="src/DndEngine.Mcp/DndEngine.Mcp.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/DndEngine.Application.Tests/DndEngine.Application.Tests.csproj" />

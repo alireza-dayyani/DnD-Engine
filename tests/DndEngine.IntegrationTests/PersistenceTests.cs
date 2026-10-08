@@ -79,7 +79,7 @@ public class PersistenceTests
             Assert.Equal(18,events[2].Data.GetProperty("total").GetInt32());
             Assert.Equal(2,(await services.GetRequiredService<CampaignService>().EventsAsync(campaignId,events[4].Sequence)).Count);
             Assert.Equal(18,await services.GetRequiredService<RulesDbContext>().Skills.CountAsync());
-            Assert.Equal(6,(await services.GetRequiredService<CampaignDbContext>().Database.GetAppliedMigrationsAsync()).Count());
+            Assert.Equal(8,(await services.GetRequiredService<CampaignDbContext>().Database.GetAppliedMigrationsAsync()).Count());
             Assert.False(services.GetRequiredService<CampaignDbContext>().Database.HasPendingModelChanges());
             Assert.False(services.GetRequiredService<RulesDbContext>().Database.HasPendingModelChanges());
         }

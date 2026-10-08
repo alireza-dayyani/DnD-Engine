@@ -1,6 +1,6 @@
-# D&D campaign engine — Phase 6 narrative world
+# D&D campaign engine — Phase 7 local MCP foundation
 
-A local .NET 10 backend for SRD 5.2.1 characters, combat, magic and encounters, plus persistent campaign narrative state and an audit timeline. A future AI Dungeon Master supplies interpretation and narration; the engine owns rules and current state. Phase 6 adds authored NPCs, locations, factions, relationships, facts, individual knowledge and quests with explicit consequences. There are no AI calls, MCP or graphical UI.
+A local .NET 10 backend for SRD 5.2.1 characters, combat, magic and encounters, plus persistent campaign narrative state and an audit timeline. A future AI Dungeon Master supplies interpretation and narration; the engine owns rules and current state. Phase 7 adds a separate authenticated, loopback-only MCP host and a scripted official-SDK client playtest. There are no built-in AI calls or graphical UI.
 
 ## Run
 
@@ -23,9 +23,10 @@ powershell -ExecutionPolicy Bypass -File scripts/CombatSmoke.ps1
 powershell -ExecutionPolicy Bypass -File scripts/CharacterSmoke.ps1
 powershell -ExecutionPolicy Bypass -File scripts/EncounterSmoke.ps1
 powershell -ExecutionPolicy Bypass -File scripts/WorldSmoke.ps1
+powershell -ExecutionPolicy Bypass -File scripts/McpSmoke.ps1
 ```
 
-Each smoke uses isolated databases under `artifacts/`, exercises actual HTTP and a process restart, saves evidence/logs, and stops its API process in `finally`. The Phase 5 script covers combat, spell and item use, XP and loot. `WorldSmoke.ps1` covers explicit world changes, secret isolation, quests, restart and retry. Scripts refuse occupied ports (defaults 5225/5226/5227/5528/5530; override with `-Port`).
+Each smoke uses isolated databases under `artifacts/`, exercises actual HTTP and a process restart, saves evidence/logs, and stops its process in `finally`. The Phase 5 script covers combat, spell and item use, XP and loot. `WorldSmoke.ps1` covers explicit world changes, secret isolation, quests, restart and retry. `McpSmoke.ps1` uses authenticated DM/player SDK clients for discovery, commands, consequence review, secret checks and restart. Scripts refuse occupied ports (existing defaults 5225/5226/5227/5528/5530; MCP defaults 5546/5547); override the appropriate `-Port`, `-ApiPort` or `-McpPort`.
 
 ## Mechanical scope
 
@@ -37,7 +38,7 @@ Phase 3 adds a choice-based path to create an SRD character and derive its mecha
 
 Phase 5 uses the same combat and spell resolvers for Goblin Minion, Skeleton and Priest Acolyte. Characters can acquire, transfer, drop, pick up, equip and consume supported items, track copper, complete an encounter with an explicit outcome, claim defeated-monster gear and record XP allocations. See [Encounter API](docs/ENCOUNTER_API.md) and [Phase 5 report](docs/PHASE5_REPORT.md).
 
-Phase 6 stores a separate narrative world with named NPCs, hierarchical locations, factions, directional relationships, world truth and holder-specific beliefs, and explicit quest progress. A player-safe read omits secret/private state; full state and mutations require loopback access to the local DM development route. Narrative commands never infer consequences from combat or grant mechanical rewards. See [World API](docs/WORLD_API.md) and [Phase 6 report](docs/PHASE6_REPORT.md).
+Phase 6 stores a separate narrative world with named NPCs, hierarchical locations, factions, directional relationships, world truth and holder-specific beliefs, and explicit quest progress. A player-safe read omits secret/private state; full state and mutations require loopback access to the local DM development route. Narrative commands never infer consequences from combat or grant mechanical rewards. Phase 7 exposes an authenticated MCP adapter and explicit consequence review; see [MCP architecture](docs/MCP_ARCHITECTURE.md), [tools](docs/MCP_TOOLS.md), [security](docs/SECURITY.md) and [Phase 7 report](docs/PHASE7_REPORT.md).
 
 ## Development API
 
@@ -93,7 +94,7 @@ See `scripts/Smoke.ps1` for a complete character-creation request and executable
 - `src/DndEngine.Infrastructure`: SQLite/EF, migrations, pinned skills/combat/character content importers, random dice.
 - `src/DndEngine.Api`: HTTP development adapter and dependency composition.
 - `tests/`: domain, application, real SQLite, and HTTP tests. All test dice are fixed.
-- [Architecture](docs/ARCHITECTURE.md), [rules sources](docs/RULES_SOURCES.md), [domain model](docs/DOMAIN_MODEL.md), [roadmap](docs/ROADMAP.md), [Phase 1 report](docs/PHASE1_REPORT.md), [Phase 2 report](docs/PHASE2_REPORT.md), [Phase 3 report](docs/PHASE3_REPORT.md), [Phase 4 report](docs/PHASE4_REPORT.md), [Phase 5 report](docs/PHASE5_REPORT.md), [Phase 6 report](docs/PHASE6_REPORT.md), [combat API](docs/COMBAT_API.md), [character API](docs/CHARACTER_API.md), [magic API](docs/MAGIC_API.md), [encounter API](docs/ENCOUNTER_API.md), [world API](docs/WORLD_API.md).
+- [Architecture](docs/ARCHITECTURE.md), [rules sources](docs/RULES_SOURCES.md), [domain model](docs/DOMAIN_MODEL.md), [roadmap](docs/ROADMAP.md), [Phase 1 report](docs/PHASE1_REPORT.md), [Phase 2 report](docs/PHASE2_REPORT.md), [Phase 3 report](docs/PHASE3_REPORT.md), [Phase 4 report](docs/PHASE4_REPORT.md), [Phase 5 report](docs/PHASE5_REPORT.md), [Phase 6 report](docs/PHASE6_REPORT.md), [Phase 7 report](docs/PHASE7_REPORT.md), [combat API](docs/COMBAT_API.md), [character API](docs/CHARACTER_API.md), [magic API](docs/MAGIC_API.md), [encounter API](docs/ENCOUNTER_API.md), [world API](docs/WORLD_API.md), [MCP architecture](docs/MCP_ARCHITECTURE.md), [MCP tools](docs/MCP_TOOLS.md), [MCP security](docs/SECURITY.md), [DM context](docs/DM_CONTEXT.md).
 
 ## Attribution
 

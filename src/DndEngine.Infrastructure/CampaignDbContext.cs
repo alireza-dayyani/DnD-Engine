@@ -52,6 +52,9 @@ public sealed class CampaignDbContext(DbContextOptions<CampaignDbContext> option
     public DbSet<EncounterRewardRow> EncounterRewards => Set<EncounterRewardRow>();
     public DbSet<DroppedItemRow> DroppedItems => Set<DroppedItemRow>();
     public DbSet<WorldStateRow> WorldStates => Set<WorldStateRow>();
+    public DbSet<CampaignAccessRow> CampaignAccess => Set<CampaignAccessRow>();
+    public DbSet<CharacterOwnershipRow> CharacterOwnership => Set<CharacterOwnershipRow>();
+    public DbSet<NarrativeConsequenceRow> NarrativeConsequences => Set<NarrativeConsequenceRow>();
     protected override void OnModelCreating(ModelBuilder model)
     {
         model.Entity<CampaignRow>().HasKey(x => x.Id);
@@ -62,6 +65,24 @@ public sealed class CampaignDbContext(DbContextOptions<CampaignDbContext> option
             .HasForeignKey(x=>x.CampaignId).OnDelete(DeleteBehavior.Restrict);
         model.Entity<WorldStateRow>().ToTable(t=>t.HasCheckConstraint(
             "CK_WorldState_Revision","Revision >= 1"));
+        model.Entity<CampaignAccessRow>().HasKey(x=>new { x.CampaignId,x.SubjectId });
+        model.Entity<CampaignAccessRow>().HasOne<CampaignRow>().WithMany()
+            .HasForeignKey(x=>x.CampaignId).OnDelete(DeleteBehavior.Restrict);
+        model.Entity<CampaignAccessRow>().ToTable(t=>t.HasCheckConstraint(
+            "CK_CampaignAccess_Role","Role IN ('Dm', 'Player')"));
+        model.Entity<CharacterOwnershipRow>().HasKey(x=>x.CharacterId);
+        model.Entity<CharacterOwnershipRow>().HasIndex(x=>new { x.CampaignId,x.SubjectId });
+        model.Entity<CharacterOwnershipRow>().HasOne<CampaignRow>().WithMany()
+            .HasForeignKey(x=>x.CampaignId).OnDelete(DeleteBehavior.Restrict);
+        model.Entity<CharacterOwnershipRow>().HasOne<CharacterRow>().WithMany()
+            .HasForeignKey(x=>x.CharacterId).OnDelete(DeleteBehavior.Restrict);
+        model.Entity<NarrativeConsequenceRow>().HasKey(x=>x.SourceEventId);
+        model.Entity<NarrativeConsequenceRow>().HasIndex(x=>x.CampaignId);
+        model.Entity<NarrativeConsequenceRow>().HasOne<CampaignRow>().WithMany()
+            .HasForeignKey(x=>x.CampaignId).OnDelete(DeleteBehavior.Restrict);
+        model.Entity<NarrativeConsequenceRow>().ToTable(t=>t.HasCheckConstraint(
+            "CK_NarrativeConsequence_Status",
+            "Status IN ('Proposed', 'Applied', 'Dismissed')"));
         model.Entity<CombatProfileRow>().HasKey(x => x.CharacterId);
         model.Entity<ProgressionRow>().HasKey(x => x.CharacterId);
         model.Entity<ProgressionRow>().HasOne<CharacterRow>().WithMany().HasForeignKey(x => x.CharacterId).OnDelete(DeleteBehavior.Restrict);
