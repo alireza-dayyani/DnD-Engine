@@ -51,10 +51,17 @@ public sealed class CampaignDbContext(DbContextOptions<CampaignDbContext> option
     public DbSet<InventoryStateRow> InventoryStates => Set<InventoryStateRow>();
     public DbSet<EncounterRewardRow> EncounterRewards => Set<EncounterRewardRow>();
     public DbSet<DroppedItemRow> DroppedItems => Set<DroppedItemRow>();
+    public DbSet<WorldStateRow> WorldStates => Set<WorldStateRow>();
     protected override void OnModelCreating(ModelBuilder model)
     {
         model.Entity<CampaignRow>().HasKey(x => x.Id);
         model.Entity<CampaignRow>().Property(x => x.Revision).IsConcurrencyToken();
+        model.Entity<WorldStateRow>().HasKey(x=>x.CampaignId);
+        model.Entity<WorldStateRow>().Property(x=>x.Revision).IsConcurrencyToken();
+        model.Entity<WorldStateRow>().HasOne<CampaignRow>().WithMany()
+            .HasForeignKey(x=>x.CampaignId).OnDelete(DeleteBehavior.Restrict);
+        model.Entity<WorldStateRow>().ToTable(t=>t.HasCheckConstraint(
+            "CK_WorldState_Revision","Revision >= 1"));
         model.Entity<CombatProfileRow>().HasKey(x => x.CharacterId);
         model.Entity<ProgressionRow>().HasKey(x => x.CharacterId);
         model.Entity<ProgressionRow>().HasOne<CharacterRow>().WithMany().HasForeignKey(x => x.CharacterId).OnDelete(DeleteBehavior.Restrict);

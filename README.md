@@ -1,6 +1,6 @@
-# D&D campaign engine — Phase 5 playable encounters
+# D&D campaign engine — Phase 6 narrative world
 
-A local .NET 10 backend for SRD 5.2.1 character choices and progression, weapon combat, persistent campaign state, and an audit timeline. A future AI Dungeon Master supplies interpretation and narration; the engine owns dice and state. Phase 4 delivered a bounded twelve-spell magic engine. Phase 5 adds three pinned SRD monsters, inventory quantities/transfers/drop/pickup, Potion of Healing, explicit encounter outcomes, loot, recorded XP and durable operation replay. There are no AI calls, MCP or graphical UI.
+A local .NET 10 backend for SRD 5.2.1 characters, combat, magic and encounters, plus persistent campaign narrative state and an audit timeline. A future AI Dungeon Master supplies interpretation and narration; the engine owns rules and current state. Phase 6 adds authored NPCs, locations, factions, relationships, facts, individual knowledge and quests with explicit consequences. There are no AI calls, MCP or graphical UI.
 
 ## Run
 
@@ -22,9 +22,10 @@ powershell -ExecutionPolicy Bypass -File scripts/Smoke.ps1
 powershell -ExecutionPolicy Bypass -File scripts/CombatSmoke.ps1
 powershell -ExecutionPolicy Bypass -File scripts/CharacterSmoke.ps1
 powershell -ExecutionPolicy Bypass -File scripts/EncounterSmoke.ps1
+powershell -ExecutionPolicy Bypass -File scripts/WorldSmoke.ps1
 ```
 
-Each smoke uses isolated databases under `artifacts/`, exercises actual HTTP and a process restart, saves evidence/logs, and stops its API process in `finally`. The Phase 5 script covers multiple SRD monsters, a weapon attack, spell and item use, victory, XP and loot, then restart and retry. Scripts refuse occupied ports (defaults 5225/5226/5227/5528; override with `-Port`).
+Each smoke uses isolated databases under `artifacts/`, exercises actual HTTP and a process restart, saves evidence/logs, and stops its API process in `finally`. The Phase 5 script covers combat, spell and item use, XP and loot. `WorldSmoke.ps1` covers explicit world changes, secret isolation, quests, restart and retry. Scripts refuse occupied ports (defaults 5225/5226/5227/5528/5530; override with `-Port`).
 
 ## Mechanical scope
 
@@ -35,6 +36,8 @@ Phase 2 adds encounter lifecycle, shared monster initiative and explicit ties, d
 Phase 3 adds a choice-based path to create an SRD character and derive its mechanical sheet. It models 9 species, 4 backgrounds, 12 classes, feats, levels 1–20, passive feature effects, multiclassing foundations, class resources, armor and inventory, hit dice and rests. Phase 4 derives class casting stats, multiclass and Pact Magic slots, and preparation/cantrip limits. The current pack has five cantrips, area damage, Blur concentration and Mystic Arcanum. Character choices include Wizard books, a Fiend spell grant and four Sorcerer Metamagic options. Font of Magic, Arcane Recovery, Sorcerous Restoration and Memorize Spell have executable paths. Combat casting spends the correct turn/resource budget and atomically saves target HP, spell resources and audit events. See [Magic API](docs/MAGIC_API.md), [Phase 3 report](docs/PHASE3_REPORT.md), and [Phase 4 report](docs/PHASE4_REPORT.md). Many active class/subclass/feat/species powers remain deferred.
 
 Phase 5 uses the same combat and spell resolvers for Goblin Minion, Skeleton and Priest Acolyte. Characters can acquire, transfer, drop, pick up, equip and consume supported items, track copper, complete an encounter with an explicit outcome, claim defeated-monster gear and record XP allocations. See [Encounter API](docs/ENCOUNTER_API.md) and [Phase 5 report](docs/PHASE5_REPORT.md).
+
+Phase 6 stores a separate narrative world with named NPCs, hierarchical locations, factions, directional relationships, world truth and holder-specific beliefs, and explicit quest progress. A player-safe read omits secret/private state; full state and mutations require loopback access to the local DM development route. Narrative commands never infer consequences from combat or grant mechanical rewards. See [World API](docs/WORLD_API.md) and [Phase 6 report](docs/PHASE6_REPORT.md).
 
 ## Development API
 
@@ -66,8 +69,10 @@ Phase 5 uses the same combat and spell resolvers for Goblin Minion, Skeleton and
 | POST | `/characters/{id}/temporary-hp` | Keep existing buffer or replace it |
 | POST | `/characters/{id}/death-saving-throws` | Basic unmodified death save |
 | GET | `/campaigns/{id}/events?after=0&limit=100` | Ordered timeline; maximum page size 500 |
+| GET | `/campaigns/{id}/world` | Player-safe public/discovered world projection |
+| GET / POST | `/dm/campaigns/{id}/world/`, `/changes` | Loopback-only DM state and atomic consequences |
 
-Enums use strings, skill IDs use lower-case kebab-case (`deception`, `animal-handling`). Both advantage flags mean a normal roll. DCs and situational modifiers remain explicit GM inputs. API uses 400 for invalid rules/input, 404 for missing entities, 409 for stale concurrent writes. After a conflict, reload and explicitly decide whether to repeat; random rolls are not automatically retried. New Phase 5 mutations require `X-Operation-Id`; legacy mutation routes accept it optionally. Reuse the same GUID with identical request bytes to recover the original successful response after a timeout.
+Enums use strings, skill IDs use lower-case kebab-case (`deception`, `animal-handling`). Both advantage flags mean a normal roll. DCs and situational modifiers remain explicit GM inputs. API uses 400 for invalid rules/input, 404 for missing entities, 409 for stale concurrent writes. After a conflict, reload and explicitly decide whether to repeat; random rolls are not automatically retried. New Phase 5–6 mutations require `X-Operation-Id`; legacy mutation routes accept it optionally. Reuse the same GUID with identical request bytes to recover the original successful response after a timeout. The ordinary campaign timeline excludes Phase 6 narrative events because their audit payloads may contain secrets; DM history is available only on the loopback route.
 
 Examples after creating IDs:
 
@@ -88,7 +93,7 @@ See `scripts/Smoke.ps1` for a complete character-creation request and executable
 - `src/DndEngine.Infrastructure`: SQLite/EF, migrations, pinned skills/combat/character content importers, random dice.
 - `src/DndEngine.Api`: HTTP development adapter and dependency composition.
 - `tests/`: domain, application, real SQLite, and HTTP tests. All test dice are fixed.
-- [Architecture](docs/ARCHITECTURE.md), [rules sources](docs/RULES_SOURCES.md), [domain model](docs/DOMAIN_MODEL.md), [roadmap](docs/ROADMAP.md), [Phase 1 report](docs/PHASE1_REPORT.md), [Phase 2 report](docs/PHASE2_REPORT.md), [Phase 3 report](docs/PHASE3_REPORT.md), [Phase 4 report](docs/PHASE4_REPORT.md), [Phase 5 report](docs/PHASE5_REPORT.md), [combat API](docs/COMBAT_API.md), [character API](docs/CHARACTER_API.md), [magic API](docs/MAGIC_API.md), [encounter API](docs/ENCOUNTER_API.md).
+- [Architecture](docs/ARCHITECTURE.md), [rules sources](docs/RULES_SOURCES.md), [domain model](docs/DOMAIN_MODEL.md), [roadmap](docs/ROADMAP.md), [Phase 1 report](docs/PHASE1_REPORT.md), [Phase 2 report](docs/PHASE2_REPORT.md), [Phase 3 report](docs/PHASE3_REPORT.md), [Phase 4 report](docs/PHASE4_REPORT.md), [Phase 5 report](docs/PHASE5_REPORT.md), [Phase 6 report](docs/PHASE6_REPORT.md), [combat API](docs/COMBAT_API.md), [character API](docs/CHARACTER_API.md), [magic API](docs/MAGIC_API.md), [encounter API](docs/ENCOUNTER_API.md), [world API](docs/WORLD_API.md).
 
 ## Attribution
 

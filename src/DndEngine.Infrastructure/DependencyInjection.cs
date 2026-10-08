@@ -28,6 +28,8 @@ public static class DependencyInjection
         services.AddScoped<IMonsterStore, SqliteMonsterStore>();
         services.AddScoped<IEncounterItemCatalog, EncounterItemCatalog>();
         services.AddScoped<IInventoryStore, SqliteInventoryStore>();
+        services.AddScoped<IWorldStore, SqliteWorldStore>();
+        services.AddScoped<WorldService>();
         services.AddScoped<InventoryService>();
         services.AddScoped<EncounterRewardService>();
         services.AddScoped<MonsterService>();

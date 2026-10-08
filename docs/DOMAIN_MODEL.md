@@ -65,6 +65,19 @@ No separate Round, Turn, Attack or Damage database entities are needed: current 
 | EncounterRewardState | Explicit outcome, defeated monster IDs, printed XP pool, award ledger and optimistic revision; XP is recorded, not converted into levels |
 | IdempotencyOperation | API operation GUID, exact request fingerprint and original response, committed with the command in campaign SQLite |
 
+## Phase 6 additions
+
+| Concept | Representation and invariant |
+|---|---|
+| WorldState | Campaign-owned, revisioned authoritative narrative snapshot; mechanical state and canonical rules stay separate |
+| NarrativeNpc | Identity, authored public/private description and motivations, status/location, optional link to a same-campaign mechanical character; no copied stats |
+| WorldLocation | Stable ID, World→Region→Settlement→District→Building→Room parent hierarchy; no cycles; discovered state controls player visibility |
+| WorldFaction / FactionMembership | Leadership, headquarters, goals/status, optional authored influence/resources/allies/enemies; memberships are separate from personal relationships |
+| WorldRelationship | Directed entity references, six validated dimensions (−5..5), label and note; a reverse relationship is independent |
+| WorldFact / KnowledgeRecord | Structured campaign truth with source and visibility, and holder-specific known/suspected/believed state with confidence, acquisition time and optional contradictory belief |
+| WorldQuest / QuestObjective | Explicit status transitions, dependencies/prerequisites, related entities, optional deadline and authored rewards/consequences; no automatic mechanical award |
+| PublicWorldState | Allowlisted player projection omitting secret/private facts, holder knowledge, NPC private fields, faction resources/goals, quest consequences and narrative event payloads |
+
 ## Investigated, intentionally deferred
 
 | Concept | Intended boundary and modeling approach |
@@ -74,10 +87,8 @@ No separate Round, Turn, Attack or Damage database entities are needed: current 
 | General effects / durations | Extend implemented condition instances with specific spell/feature triggers and world time, not arbitrary scripts |
 | Complete equipment economy | Phase 5 adds quantities, copper, drop/pickup and one consumable. Exact package branches, prices/purchases, encumbrance and held-hand state remain deferred |
 | Spell / SpellSlot | Versioned spell definition and reusable effects; slots tracked on the character; no universal scripting language |
-| NPC | Canonical definition/reference separated from mutable campaign NPC state; no proprietary lore ingestion |
-| Relationship | Directed campaign participant IDs, state and source events; narrative interpretation remains external |
-| Quest / QuestObjective | Campaign-owned progress and explicit transitions; not rules catalog content |
-| WorldFlag | Namespaced typed campaign fact with mutation event; avoid arbitrary SQL or overwrite-only memory |
-| Lore knowledge | Separate retrieval interface with provenance and permissions; never confused with events that actually occurred |
+| Canonical NPC/lore references | Future sourced setting lore remains separate from mutable campaign NPCs; no proprietary lore ingestion |
+| Autonomous relationship/quest changes | Phase 6 changes are explicit commands; no combat-driven emotional or quest inference |
+| Remote lore knowledge | Phase 6 holder beliefs and world truth are local campaign state; remotely served lore retrieval needs provenance and authorization |
 
 None of these deferred concepts has an empty placeholder table. Their introduction should follow a tested vertical use case.

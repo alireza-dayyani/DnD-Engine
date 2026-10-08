@@ -272,6 +272,16 @@ namespace DndEngine.Infrastructure.Migrations.Campaign
                     b.ToTable("Progressions");
                 });
 
+            modelBuilder.Entity("DndEngine.Infrastructure.WorldStateRow", b =>
+                {
+                    b.Property<Guid>("CampaignId").HasColumnType("TEXT");
+                    b.Property<long>("Revision").IsConcurrencyToken().HasColumnType("INTEGER");
+                    b.Property<string>("StateJson").IsRequired().HasColumnType("TEXT");
+                    b.HasKey("CampaignId");
+                    b.ToTable("WorldStates", t =>
+                        t.HasCheckConstraint("CK_WorldState_Revision", "Revision >= 1"));
+                });
+
             modelBuilder.Entity("DndEngine.Infrastructure.CharacterRow", b =>
                 {
                     b.HasOne("DndEngine.Infrastructure.CampaignRow", null)
@@ -358,6 +368,12 @@ namespace DndEngine.Infrastructure.Migrations.Campaign
                 {
                     b.HasOne("DndEngine.Infrastructure.CharacterRow", null).WithMany()
                         .HasForeignKey("CharacterId").OnDelete(DeleteBehavior.Restrict).IsRequired();
+                });
+
+            modelBuilder.Entity("DndEngine.Infrastructure.WorldStateRow", b =>
+                {
+                    b.HasOne("DndEngine.Infrastructure.CampaignRow", null).WithMany()
+                        .HasForeignKey("CampaignId").OnDelete(DeleteBehavior.Restrict).IsRequired();
                 });
 #pragma warning restore 612, 618
         }

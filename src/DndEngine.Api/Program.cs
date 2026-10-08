@@ -30,7 +30,7 @@ app.MapPost("/campaigns", async (CreateCampaign request, CampaignService service
 app.MapGet("/campaigns/{id:guid}", (Guid id, CampaignService service, CancellationToken ct) => service.GetAsync(id, ct));
 app.MapPost("/campaigns/{id:guid}/time/advance", (Guid id, AdvanceCampaignTime request,
     CampaignService service, CancellationToken ct) => service.AdvanceTimeAsync(id, request, ct));
-app.MapGet("/campaigns/{id:guid}/events", (Guid id, long? after, int? limit, CampaignService service, CancellationToken ct) => service.EventsAsync(id, after ?? 0, limit ?? 100, ct));
+app.MapGet("/campaigns/{id:guid}/events", (Guid id, long? after, int? limit, WorldService service, CancellationToken ct) => service.GetPublicTimelineAsync(id, after ?? 0, limit ?? 100, ct));
 app.MapPost("/characters", async (CreateCharacter request, CharacterService service, CancellationToken ct) => {
     var result = await service.CreateAsync(request, ct); return Results.Created($"/characters/{result.Id}", result);
 });
@@ -47,6 +47,7 @@ app.MapMonsters();
 app.MapInventory();
 app.MapEncounterRewards();
 app.MapProgression();
+app.MapWorld();
 await app.Services.InitializeDndEngineAsync();
 await app.RunAsync();
 static string DefaultDataDirectory()

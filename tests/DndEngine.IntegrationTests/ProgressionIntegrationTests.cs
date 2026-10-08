@@ -544,7 +544,7 @@ public sealed class ProgressionIntegrationTests
             Assert.Equal(2,sheet.Level); Assert.Equal(17,sheet.ArmorClass.Total);
             Assert.Equal(2,sheet.HitDice.Single().Available);
             Assert.Equal(6,(await services.GetRequiredService<RulesDbContext>().Database.GetAppliedMigrationsAsync()).Count());
-            Assert.Equal(5,(await services.GetRequiredService<CampaignDbContext>().Database.GetAppliedMigrationsAsync()).Count());
+            Assert.Equal(6,(await services.GetRequiredService<CampaignDbContext>().Database.GetAppliedMigrationsAsync()).Count());
             Assert.False(services.GetRequiredService<RulesDbContext>().Database.HasPendingModelChanges());
             var events=await services.GetRequiredService<CampaignService>().EventsAsync(campaignId);
             Assert.Contains(events,x=>x.Type=="LevelGained");
