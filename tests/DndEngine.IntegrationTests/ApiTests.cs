@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using DndEngine.Domain;
 using DndEngine.Domain.Progression;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.Configuration;
@@ -24,6 +25,21 @@ public class ApiTests
                 new FixedDiceRoller(rolls.Length==0 ? [11,7,16,10] : rolls)));
         }
     }
+    [Fact]
+    public async Task DevelopmentApiRejectsNonLoopbackRequests()
+    {
+        await using var app=new Factory();
+        using var client=app.CreateClient();
+        Assert.Equal(HttpStatusCode.OK,(await client.GetAsync("/health")).StatusCode);
+        var remote=await app.Server.SendAsync(context=>
+        {
+            context.Connection.RemoteIpAddress=IPAddress.Parse("203.0.113.10");
+            context.Request.Host=new HostString("localhost");
+            context.Request.Path="/health";
+        });
+        Assert.Equal(StatusCodes.Status403Forbidden,remote.Response.StatusCode);
+    }
+
     [Fact]
     public async Task HttpContractsResolveMechanicalSlice()
     {

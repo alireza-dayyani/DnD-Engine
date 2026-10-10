@@ -22,6 +22,7 @@
   <ItemGroup>
     <ProjectReference Include="..\..\src\DndEngine.Infrastructure\DndEngine.Infrastructure.csproj" />
     <ProjectReference Include="..\..\src\DndEngine.Api\DndEngine.Api.csproj" />
+    <ProjectReference Include="..\..\src\DndEngine.Mcp\DndEngine.Mcp.csproj" Aliases="mcp" />
   </ItemGroup>
 
 </Project>

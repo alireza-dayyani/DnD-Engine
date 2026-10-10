@@ -53,6 +53,14 @@ public sealed class CampaignMcpTools(CampaignAccessService access,CampaignServic
         return view;
     }
 
+    private async Task RequireReactionControl(ClaimsPrincipal principal,Guid campaignId,
+        CombatView view,Guid defenderId,CancellationToken ct)
+    {
+        var defender=view.Encounter.Combatants.SingleOrDefault(x=>x.Id==defenderId)
+            ?? throw new RuleViolation("Combatant is absent.");
+        await Character(principal,campaignId,defender.CharacterId,ct);
+    }
+
     [McpServerTool(Name="get_campaign_summary",UseStructuredContent=true),
      Description("Read campaign identity, pinned ruleset and authoritative game time. Requires membership in the campaign.")]
     public async Task<JsonElement> GetCampaignSummary(ClaimsPrincipal user,Guid campaignId,
@@ -241,21 +249,25 @@ public sealed class CampaignMcpTools(CampaignAccessService access,CampaignServic
     }
 
     [McpServerTool(Name="perform_attack",UseStructuredContent=true),
-     Description("Perform a supported weapon attack on the current turn. Actor must be owned by player or DM-controlled; engine enforces action economy. A declared reaction also requires the current encounter revision.")]
+     Description("Perform a supported weapon attack on the current turn. A declared defender reaction requires control of that defender and the current encounter revision.")]
     public async Task<JsonElement> PerformAttack(ClaimsPrincipal user,Guid campaignId,
         Guid encounterId,AttackCombatant request,Guid operationId,CancellationToken ct)
     {
-        await Encounter(user,campaignId,encounterId,request.CombatantId,ct);
+        var view=await Encounter(user,campaignId,encounterId,request.CombatantId,ct);
+        if (request.Reaction is not null && request.Attack is not null)
+            await RequireReactionControl(user,campaignId,view,request.Attack.TargetId,ct);
         return await Run(user,operationId,"perform_attack",new { campaignId,encounterId,request },
             token=>combat.AttackAsync(encounterId,request,token),ct);
     }
 
     [McpServerTool(Name="cast_spell",UseStructuredContent=true),
-     Description("Cast an already supported combat spell on the current turn. Actor ownership, resources, action economy and encounter revision are enforced.")]
+     Description("Cast an already supported combat spell on the current turn. A declared defender reaction requires control of that defender.")]
     public async Task<JsonElement> CastSpell(ClaimsPrincipal user,Guid campaignId,
         Guid encounterId,CastCombatSpell request,Guid operationId,CancellationToken ct)
     {
-        await Encounter(user,campaignId,encounterId,request.CombatantId,ct);
+        var view=await Encounter(user,campaignId,encounterId,request.CombatantId,ct);
+        if (request.Reaction is not null && request.Targets is { Length: 1 })
+            await RequireReactionControl(user,campaignId,view,request.Targets[0].CombatantId,ct);
         return await Run(user,operationId,"cast_spell",new { campaignId,encounterId,request },
             token=>combat.CastSpellAsync(encounterId,request,token),ct);
     }
@@ -339,7 +351,7 @@ public sealed class CampaignMcpTools(CampaignAccessService access,CampaignServic
     }
 
     [McpServerTool(Name="propose_narrative_consequence",UseStructuredContent=true),
-     Description("DM only: link a proposed typed world-change batch to one eligible mechanical event for review. No world change occurs yet. Requires stable operationId.")]
+     Description("DM only: create or revise an unresolved typed world-change proposal for one eligible mechanical event. No world change occurs yet. Requires stable operationId.")]
     public async Task<JsonElement> ProposeNarrativeConsequence(ClaimsPrincipal user,
         Guid campaignId,Guid sourceEventId,ApplyWorldChanges proposal,
         Guid operationId,CancellationToken ct)
@@ -351,13 +363,14 @@ public sealed class CampaignMcpTools(CampaignAccessService access,CampaignServic
     }
 
     [McpServerTool(Name="record_narrative_consequence",UseStructuredContent=true),
-     Description("DM only: explicitly apply or dismiss a reviewed proposal. Applying commits validated world changes and source-event resolution atomically; requires stable operationId.")]
+     Description("DM only: apply or dismiss the exact proposal identified by its reviewToken. If the proposal changed, reread it before resolving. Requires stable operationId.")]
     public async Task<JsonElement> RecordNarrativeConsequence(ClaimsPrincipal user,
-        Guid campaignId,Guid sourceEventId,bool apply,Guid operationId,CancellationToken ct)
+        Guid campaignId,Guid sourceEventId,bool apply,string reviewToken,
+        Guid operationId,CancellationToken ct)
     {
         await access.RequireDmAsync(user,campaignId,ct);
         return await Run(user,operationId,"record_narrative_consequence",
-            new { campaignId,sourceEventId,apply },
-            token=>consequences.ResolveAsync(campaignId,sourceEventId,apply,token),ct);
+            new { campaignId,sourceEventId,apply,reviewToken },
+            token=>consequences.ResolveAsync(campaignId,sourceEventId,apply,reviewToken,token),ct);
     }
 }

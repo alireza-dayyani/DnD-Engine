@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using System.Text.Json;
 using DndEngine.Domain;
 
@@ -6,7 +7,12 @@ namespace DndEngine.Application;
 public enum ConsequenceStatus { Proposed, Applied, Dismissed }
 public sealed record NarrativeConsequence(Guid SourceEventId,Guid CampaignId,
     ConsequenceStatus Status,long ExpectedWorldRevision,string Cause,
-    WorldChange[] Changes,long? AppliedWorldRevision,DateTimeOffset? ResolvedAtUtc);
+    WorldChange[] Changes,long? AppliedWorldRevision,DateTimeOffset? ResolvedAtUtc)
+{
+    public string ReviewToken => Convert.ToHexString(SHA256.HashData(
+        JsonSerializer.SerializeToUtf8Bytes(new {
+            SourceEventId,CampaignId,ExpectedWorldRevision,Cause,Changes })));
+}
 public sealed record ConsequenceReview(CampaignEvent Source,NarrativeConsequence? Proposal);
 
 public interface INarrativeConsequenceStore
@@ -14,6 +20,7 @@ public interface INarrativeConsequenceStore
     Task<NarrativeConsequence?> GetAsync(Guid sourceEventId,CancellationToken ct);
     Task<NarrativeConsequence[]> ListAsync(Guid campaignId,CancellationToken ct);
     Task ProposeAsync(NarrativeConsequence proposal,CancellationToken ct);
+    Task ReplaceProposedAsync(NarrativeConsequence proposal,CancellationToken ct);
     Task ResolveAsync(NarrativeConsequence resolution,CancellationToken ct);
 }
 
@@ -29,21 +36,34 @@ public sealed class NarrativeConsequenceService(ICampaignStore campaigns,
         if (after<0 || limit is < 1 or > 50) throw new RuleViolation("Invalid review cursor or limit.");
         if (await campaigns.GetCampaignAsync(campaignId,ct) is null)
             throw new NotFoundException("Campaign not found.");
-        var events=await campaigns.GetEventsAsync(campaignId,after,500,ct);
         var proposals=(await store.ListAsync(campaignId,ct))
             .ToDictionary(x=>x.SourceEventId);
-        return events.Where(x=>EligibleTypes.Contains(x.Type) &&
-            (!proposals.TryGetValue(x.EventId,out var p) || p.Status==ConsequenceStatus.Proposed))
-            .Take(limit).Select(x=>new ConsequenceReview(x,
-                proposals.GetValueOrDefault(x.EventId))).ToArray();
+        var pending=new List<ConsequenceReview>(limit);
+        while (pending.Count<limit)
+        {
+            var events=await campaigns.GetEventsAsync(campaignId,after,500,ct);
+            foreach (var source in events)
+            {
+                if (!EligibleTypes.Contains(source.Type) ||
+                    proposals.TryGetValue(source.EventId,out var proposal) &&
+                    proposal.Status!=ConsequenceStatus.Proposed) continue;
+                pending.Add(new(source,proposals.GetValueOrDefault(source.EventId)));
+                if (pending.Count==limit) break;
+            }
+            if (events.Count<500) break;
+            after=events[^1].Sequence;
+        }
+        return pending.ToArray();
     }
 
     public async Task<NarrativeConsequence> ProposeAsync(Guid campaignId,Guid sourceEventId,
         ApplyWorldChanges proposal,CancellationToken ct=default)
     {
         var source=await Source(campaignId,sourceEventId,ct);
-        if (await store.GetAsync(source.EventId,ct) is not null)
-            throw new StateConflictException("This event already has a consequence review.");
+        var existing=await store.GetAsync(source.EventId,ct);
+        if (existing is not null && (existing.CampaignId!=campaignId ||
+            existing.Status!=ConsequenceStatus.Proposed))
+            throw new StateConflictException("This event already has a resolved consequence review.");
         if (proposal.Changes is null || proposal.Changes.Length is < 1 or > 50 ||
             string.IsNullOrWhiteSpace(proposal.Cause) || proposal.Cause.Length>500)
             throw new RuleViolation("A proposal needs 1–50 changes and a cause.");
@@ -52,18 +72,21 @@ public sealed class NarrativeConsequenceService(ICampaignStore campaigns,
             throw new StateConflictException("World revision changed before review.");
         var record=new NarrativeConsequence(sourceEventId,campaignId,ConsequenceStatus.Proposed,
             proposal.ExpectedRevision,proposal.Cause,proposal.Changes,null,null);
-        await store.ProposeAsync(record,ct);
+        if (existing is null) await store.ProposeAsync(record,ct);
+        else await store.ReplaceProposedAsync(record,ct);
         return record;
     }
 
     public async Task<NarrativeConsequence> ResolveAsync(Guid campaignId,Guid sourceEventId,
-        bool apply,CancellationToken ct=default)
+        bool apply,string reviewToken,CancellationToken ct=default)
     {
         await Source(campaignId,sourceEventId,ct);
         var proposal=await store.GetAsync(sourceEventId,ct)
             ?? throw new NotFoundException("Consequence proposal not found.");
         if (proposal.CampaignId!=campaignId || proposal.Status!=ConsequenceStatus.Proposed)
             throw new StateConflictException("Consequence is already resolved.");
+        if (!string.Equals(proposal.ReviewToken,reviewToken,StringComparison.Ordinal))
+            throw new StateConflictException("Consequence proposal changed. Review it again before resolving.");
         long? revision=null;
         if (apply)
         {

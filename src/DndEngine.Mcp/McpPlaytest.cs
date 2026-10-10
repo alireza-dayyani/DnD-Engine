@@ -87,7 +87,7 @@ public static class McpPlaytest
         var world=await Call(dm,"get_visible_world",new() { ["campaignId"]=campaign });
         var revision=Field(Field(world,"state"),"revision").GetInt64();
         var witness=Guid.NewGuid();
-        await Call(dm,"propose_narrative_consequence",new() {
+        var proposed=await Call(dm,"propose_narrative_consequence",new() {
             ["campaignId"]=campaign,["sourceEventId"]=sourceEventId,
             ["proposal"]=new { expectedRevision=revision,cause="Witness responds to the encounter",
                 changes=new[] { new { kind="CreateNpc",npc=new { id=witness,
@@ -98,6 +98,7 @@ public static class McpPlaytest
             ["operationId"]=Guid.NewGuid() });
         var resolution=new Dictionary<string,object?> { ["campaignId"]=campaign,
             ["sourceEventId"]=sourceEventId,["apply"]=true,
+            ["reviewToken"]=Field(proposed,"reviewToken").GetString(),
             ["operationId"]=Guid.NewGuid() };
         var applied=await Call(dm,"record_narrative_consequence",resolution);
         var appliedReplay=await Call(dm,"record_narrative_consequence",resolution);

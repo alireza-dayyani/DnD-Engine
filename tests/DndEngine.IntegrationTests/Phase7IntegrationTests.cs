@@ -1,9 +1,13 @@
+extern alias mcp;
 using System.Security.Claims;
 using System.Text.Json;
 using DndEngine.Application;
 using DndEngine.Domain;
+using DndEngine.Domain.Combat;
+using DndEngine.Domain.Progression;
 using DndEngine.Domain.World;
 using DndEngine.Infrastructure;
+using CampaignMcpTools = mcp::DndEngine.Mcp.CampaignMcpTools;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -15,6 +19,48 @@ public sealed class Phase7IntegrationTests
         .AddDndEngine(path).BuildServiceProvider(new ServiceProviderOptions { ValidateScopes=true });
     private static ClaimsPrincipal Principal(Guid subject) => new(new ClaimsIdentity(
         [new Claim("sub",subject.ToString("D"))],"test"));
+
+    [Fact]
+    public async Task PlayerCannotDeclareAnotherCharactersReaction()
+    {
+        var path=Path.Combine(Path.GetTempPath(),"DndEngine.McpReaction",Guid.NewGuid().ToString("N"));
+        await using var provider=Provider(path);
+        await provider.InitializeDndEngineAsync();
+        await using var scope=provider.CreateAsyncScope(); var services=scope.ServiceProvider;
+        var campaign=await services.GetRequiredService<CampaignService>().CreateAsync(new("Reactions"));
+        var characters=services.GetRequiredService<CharacterService>();
+        CreateCharacter Sheet(string name)=>new(campaign.Id,name,1,
+            Enum.GetValues<Ability>().ToDictionary(x=>x,_=>12),[],[],20);
+        var attacker=await characters.CreateAsync(Sheet("Attacker"));
+        var defender=await characters.CreateAsync(Sheet("Defender"));
+        var combat=services.GetRequiredService<CombatService>();
+        var capabilities=new CombatCapabilities(30,["longsword"],[],[],[],[]);
+        await combat.ImportAsync(attacker.Id,capabilities);
+        await combat.ImportAsync(defender.Id,capabilities);
+        var sword=await combat.GrantWeaponAsync(attacker.Id,new("longsword"));
+        var encounter=await combat.CreateAsync(campaign.Id,new("Duel"));
+        var actor=await combat.AddAsync(encounter.Id,new(attacker.Id));
+        var target=await combat.AddAsync(encounter.Id,new(defender.Id));
+        var subject=Guid.NewGuid();
+        var db=services.GetRequiredService<CampaignDbContext>();
+        db.CampaignAccess.Add(new CampaignAccessRow {
+            CampaignId=campaign.Id,SubjectId=subject,Role="Player" });
+        db.CharacterOwnership.Add(new CharacterOwnershipRow {
+            CampaignId=campaign.Id,SubjectId=subject,CharacterId=attacker.Id });
+        await db.SaveChangesAsync(); db.ChangeTracker.Clear();
+        var tools=ActivatorUtilities.CreateInstance<CampaignMcpTools>(services);
+        var reaction=new HellishRebukeReaction(SpellSlotPoolKind.PactMagic,1,true,true);
+        var attack=new AttackCombatant(actor.Result.Id,
+            new(target.Result.Id,sword.Id,AttackMode.Melee,new(5,true,true)),reaction);
+        await Assert.ThrowsAsync<AccessDeniedException>(()=>tools.PerformAttack(
+            Principal(subject),campaign.Id,encounter.Id,attack,Guid.NewGuid(),default));
+        var spell=new CastCombatSpell(actor.Result.Id,"warlock","eldritch-blast",null,0,
+            [new(target.Result.Id,5,true)],true,true,true,encounter.Revision,
+            Reaction:reaction);
+        await Assert.ThrowsAsync<AccessDeniedException>(()=>tools.CastSpell(
+            Principal(subject),campaign.Id,encounter.Id,spell,Guid.NewGuid(),default));
+        Assert.Empty(await db.IdempotencyOperations.ToArrayAsync());
+    }
 
     [Fact]
     public async Task ExistingPhase6CampaignUpgradesWithoutLosingWorldState()
@@ -192,6 +238,82 @@ public sealed class Phase7IntegrationTests
     }
 
     [Fact]
+    public async Task PendingReviewFindsEligibleEventBeyondFirstEventPage()
+    {
+        var path=Path.Combine(Path.GetTempPath(),"DndEngine.McpPending",Guid.NewGuid().ToString("N"));
+        await using var provider=Provider(path);
+        await provider.InitializeDndEngineAsync();
+        await using var scope=provider.CreateAsyncScope(); var services=scope.ServiceProvider;
+        var campaign=await services.GetRequiredService<CampaignService>().CreateAsync(new("Long history"));
+        var source=Guid.NewGuid(); var dm=Guid.NewGuid();
+        var db=services.GetRequiredService<CampaignDbContext>();
+        db.CampaignAccess.Add(new CampaignAccessRow {
+            CampaignId=campaign.Id,SubjectId=dm,Role="Dm" });
+        db.Events.AddRange(Enumerable.Range(0,510).Select(_=>new EventRow {
+            EventId=Guid.NewGuid(),CampaignId=campaign.Id,Type="SkillCheckMade",
+            OccurredAtUtc=DateTimeOffset.UtcNow,RulesetId=campaign.Ruleset.Id,
+            SrdVersion=campaign.Ruleset.Version,SchemaVersion=1,DataJson="{}" }));
+        db.Events.Add(new EventRow { EventId=source,CampaignId=campaign.Id,
+            Type="EncounterCompleted",OccurredAtUtc=DateTimeOffset.UtcNow,
+            RulesetId=campaign.Ruleset.Id,SrdVersion=campaign.Ruleset.Version,
+            SchemaVersion=1,DataJson="{}" });
+        await db.SaveChangesAsync(); db.ChangeTracker.Clear();
+        var review=services.GetRequiredService<NarrativeConsequenceService>();
+        Assert.Equal(source,Assert.Single(await review.PendingAsync(campaign.Id)).Source.EventId);
+        var context=await services.GetRequiredService<DmContextService>()
+            .AssembleAsync(Principal(dm),campaign.Id);
+        Assert.Single(context.PendingConsequences);
+    }
+
+    [Fact]
+    public async Task UnresolvedProposalCanBeRevisedAfterWorldChanges()
+    {
+        var path=Path.Combine(Path.GetTempPath(),"DndEngine.McpRevise",Guid.NewGuid().ToString("N"));
+        await using var provider=Provider(path);
+        await provider.InitializeDndEngineAsync();
+        await using var scope=provider.CreateAsyncScope(); var services=scope.ServiceProvider;
+        var campaign=await services.GetRequiredService<CampaignService>().CreateAsync(new("Revise"));
+        var source=Guid.NewGuid(); var subject=Guid.NewGuid();
+        var db=services.GetRequiredService<CampaignDbContext>();
+        db.Events.Add(new EventRow { EventId=source,CampaignId=campaign.Id,
+            Type="EncounterCompleted",OccurredAtUtc=DateTimeOffset.UtcNow,
+            RulesetId=campaign.Ruleset.Id,SrdVersion=campaign.Ruleset.Version,
+            SchemaVersion=1,DataJson="{}" });
+        await db.SaveChangesAsync(); db.ChangeTracker.Clear();
+        var review=services.GetRequiredService<NarrativeConsequenceService>();
+        var runner=services.GetRequiredService<DurableMcpCommandRunner>();
+        var world=services.GetRequiredService<WorldService>();
+        var firstNpc=Guid.NewGuid(); var secondNpc=Guid.NewGuid();
+        WorldChange Npc(Guid id,string name)=>new(WorldChangeKind.CreateNpc,
+            Npc:new(id,name,"A witness","cloak","traveler","calm","help","fear","home"));
+        var initial=new ApplyWorldChanges(0,"First reading",[Npc(firstNpc,"Witness")]);
+        await runner.RunAsync(Guid.NewGuid(),subject,"propose",initial,
+            ct=>review.ProposeAsync(campaign.Id,source,initial,ct));
+        var initialToken=Assert.Single(await review.PendingAsync(campaign.Id)).Proposal!.ReviewToken;
+        await world.ApplyAsync(campaign.Id,new(0,"Other event",[Npc(secondNpc,"Guide")]));
+        await Assert.ThrowsAsync<StateConflictException>(()=>runner.RunAsync(
+            Guid.NewGuid(),subject,"resolve",new { source,apply=true },
+            ct=>review.ResolveAsync(campaign.Id,source,true,initialToken,ct)));
+        var revised=new ApplyWorldChanges(1,"Revised reading",[Npc(firstNpc,"Witness")]);
+        await runner.RunAsync(Guid.NewGuid(),subject,"propose",revised,
+            ct=>review.ProposeAsync(campaign.Id,source,revised,ct));
+        var pending=Assert.Single(await review.PendingAsync(campaign.Id));
+        Assert.Equal(1,pending.Proposal!.ExpectedWorldRevision);
+        Assert.Equal("Revised reading",pending.Proposal.Cause);
+        Assert.NotEqual(initialToken,pending.Proposal.ReviewToken);
+        await Assert.ThrowsAsync<StateConflictException>(()=>runner.RunAsync(
+            Guid.NewGuid(),subject,"resolve",new { source,apply=true,initialToken },
+            ct=>review.ResolveAsync(campaign.Id,source,true,initialToken,ct)));
+        await runner.RunAsync(Guid.NewGuid(),subject,"resolve",new { source,apply=true },
+            ct=>review.ResolveAsync(campaign.Id,source,true,pending.Proposal.ReviewToken,ct));
+        Assert.Equal(2,(await world.GetDmAsync(campaign.Id)).State.Revision);
+        Assert.Equal(2,(await world.GetDmAsync(campaign.Id)).State.Npcs.Length);
+        await Assert.ThrowsAsync<StateConflictException>(()=>runner.RunAsync(
+            Guid.NewGuid(),subject,"propose",revised,
+            ct=>review.ProposeAsync(campaign.Id,source,revised,ct)));
+    }
+
+    [Fact]
     public async Task ReviewedConsequenceAppliesOnceAndRetainsSource()
     {
         var path=Path.Combine(Path.GetTempPath(),"DndEngine.McpConsequence",Guid.NewGuid().ToString("N"));
@@ -217,18 +339,20 @@ public sealed class Phase7IntegrationTests
         Assert.Contains("Proposed",proposedJson);
         Assert.Equal(0,(await services.GetRequiredService<WorldService>()
             .GetDmAsync(campaign.Id)).State.Revision);
-        Assert.Single(await review.PendingAsync(campaign.Id));
+        var reviewToken=Assert.Single(await review.PendingAsync(campaign.Id)).Proposal!.ReviewToken;
         var appliedJson=await runner.RunAsync(resolutionId,subject,"resolve",
-            new { campaign.Id,eventId,apply=true },ct=>review.ResolveAsync(campaign.Id,eventId,true,ct));
+            new { campaign.Id,eventId,apply=true,reviewToken },
+            ct=>review.ResolveAsync(campaign.Id,eventId,true,reviewToken,ct));
         Assert.Contains("Applied",appliedJson);
         Assert.Equal(appliedJson,await runner.RunAsync(resolutionId,subject,"resolve",
-            new { campaign.Id,eventId,apply=true },ct=>review.ResolveAsync(campaign.Id,eventId,true,ct)));
+            new { campaign.Id,eventId,apply=true,reviewToken },
+            ct=>review.ResolveAsync(campaign.Id,eventId,true,reviewToken,ct)));
         Assert.Equal(1,(await services.GetRequiredService<WorldService>()
             .GetDmAsync(campaign.Id)).State.Revision);
         Assert.Empty(await review.PendingAsync(campaign.Id));
         await Assert.ThrowsAsync<StateConflictException>(()=>runner.RunAsync(Guid.NewGuid(),subject,
-            "resolve",new { campaign.Id,eventId,apply=true },
-            ct=>review.ResolveAsync(campaign.Id,eventId,true,ct)));
+            "resolve",new { campaign.Id,eventId,apply=true,reviewToken },
+            ct=>review.ResolveAsync(campaign.Id,eventId,true,reviewToken,ct)));
         Assert.Single((await services.GetRequiredService<WorldService>()
             .GetDmAsync(campaign.Id)).State.Npcs);
         Assert.False(db.Database.HasPendingModelChanges());

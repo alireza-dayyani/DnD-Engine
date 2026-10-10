@@ -1,3 +1,4 @@
+using System.Net;
 using System.Text.Json.Serialization;
 using DndEngine.Application;
 using DndEngine.Domain;
@@ -12,6 +13,19 @@ builder.Services.ConfigureHttpJsonOptions(o => {
 builder.Services.AddProblemDetails();
 builder.Services.AddDndEngine(builder.Configuration["DataDirectory"] ?? DefaultDataDirectory());
 var app = builder.Build();
+app.Use(async (context,next) =>
+{
+    var address=context.Connection.RemoteIpAddress;
+    var host=context.Request.Host.Host;
+    var testServer=app.Environment.IsEnvironment("Testing") && address is null;
+    if ((!testServer && (address is null || !IPAddress.IsLoopback(address))) ||
+        host is not ("127.0.0.1" or "localhost" or "[::1]" or "::1"))
+    {
+        context.Response.StatusCode=403;
+        return;
+    }
+    await next(context);
+});
 app.UseRouting();
 app.Use(async (context, next) =>
 {

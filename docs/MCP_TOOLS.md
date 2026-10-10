@@ -20,8 +20,8 @@ All 30 tools are discovered through the official SDK. Each requires a valid bear
 | `make_skill_check`, `make_saving_throw` | Owned character or DM, supported check; engine rolls and audits |
 | `roll_dice` | Member, supported dice expression; standalone persisted roll result, no game effect |
 | `start_encounter` | DM, existing prepared encounter after initiative; starts turn order |
-| `perform_attack` | Owned actor or DM; engine validates turn, weapon, targets and action economy |
-| `cast_spell` | Owned actor or DM; prepared supported spell, components, resources and revision |
+| `perform_attack` | Owned actor or DM; a declared defender reaction also requires control of the defender; engine validates turn, weapon, targets and action economy |
+| `cast_spell` | Owned actor or DM; a declared defender reaction also requires control of the defender; prepared supported spell, components, resources and revision |
 | `use_item` | Owned actor or DM; supported combat consumable and revision |
 | `end_turn` | Owned actor or DM; advances authoritative turn |
 | `complete_encounter` | DM, valid outcome and current revision; records completion and rewards state |
@@ -30,7 +30,7 @@ All 30 tools are discovered through the official SDK. Each requires a valid bear
 | --- | --- |
 | `apply_world_changes` | DM; 1–50 typed Phase 6 changes, cause and expected world revision |
 | `update_npc`, `update_relationship`, `grant_knowledge`, `update_quest` | DM; one validated Phase 6 change via the same world command boundary |
-| `propose_narrative_consequence` | DM; links a typed proposal to one eligible mechanical source event without applying it |
-| `record_narrative_consequence` | DM; explicitly applies or dismisses the proposal exactly once |
+| `propose_narrative_consequence` | DM; creates or revises an unresolved typed proposal for one eligible mechanical source event without applying it; use a fresh operation ID and world revision when revising |
+| `record_narrative_consequence` | DM; applies or dismisses the exact proposal identified by its `reviewToken` exactly once; a changed proposal requires fresh review |
 
 The engine does not expose arbitrary damage, HP edits, SQL, filesystem access, custom scripts or unsupported rules as MCP shortcuts. Combat spatial facts such as distance and visibility are caller declarations subject to engine validation; the prototype has no map sensor that can independently prove them. Tool descriptions and schemas are generated from the typed C# methods in `CampaignMcpTools`.

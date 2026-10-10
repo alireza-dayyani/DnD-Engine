@@ -12,7 +12,7 @@ The local host accepts `http://127.0.0.1`, `localhost` or `::1` only. It checks 
 
 Commands use the existing Phase 5 `IdempotencyOperations` table. `DurableMcpCommandRunner` fingerprints the authenticated subject, tool and typed input, then commits its claim, Application-layer changes, audit events and exact successful result in one SQLite transaction. A retry with the same operation ID and input returns the saved result. A different input conflicts; failed commands roll back. Concurrent duplicates were exercised in integration tests. The HTTP API keeps its own existing middleware and compatible table.
 
-`NarrativeConsequenceService` identifies eligible `MonsterDefeated` and `EncounterCompleted` events. The DM can propose typed Phase 6 world changes, then explicitly apply or dismiss the proposal. Source event ID is the primary key of the consequence record; apply and resolution commit together. No event changes world state automatically.
+`NarrativeConsequenceService` identifies eligible `MonsterDefeated` and `EncounterCompleted` events. The DM can propose typed Phase 6 world changes and revise an unresolved proposal after the world changes. Applying or dismissing requires the `reviewToken` returned with the exact proposal the DM reviewed; a changed proposal requires a new review. Source event ID is the primary key of the consequence record; apply and resolution commit together. No event changes world state automatically.
 
 For local setup, create a campaign with the existing API and keep that API on loopback. Build the solution, then in PowerShell configure one shared data directory and a fresh random key:
 

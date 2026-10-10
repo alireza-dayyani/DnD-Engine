@@ -39,6 +39,21 @@ public sealed class SqliteNarrativeConsequenceStore(CampaignDbContext db)
         db.ChangeTracker.Clear();
     }
 
+    public async Task ReplaceProposedAsync(NarrativeConsequence proposal,CancellationToken ct)
+    {
+        if (db.Database.CurrentTransaction is null)
+            throw new InvalidOperationException("Consequence revision requires a command transaction.");
+        var row=await db.NarrativeConsequences.SingleAsync(x=>
+            x.SourceEventId==proposal.SourceEventId,ct);
+        if (row.CampaignId!=proposal.CampaignId || row.Status!="Proposed")
+            throw new StateConflictException("Consequence is already resolved.");
+        row.ExpectedWorldRevision=proposal.ExpectedWorldRevision;
+        row.Cause=proposal.Cause;
+        row.ChangesJson=JsonSerializer.Serialize(proposal.Changes,CombatCatalog.Json);
+        await db.SaveChangesAsync(ct);
+        db.ChangeTracker.Clear();
+    }
+
     public async Task ResolveAsync(NarrativeConsequence resolution,CancellationToken ct)
     {
         if (db.Database.CurrentTransaction is null)
